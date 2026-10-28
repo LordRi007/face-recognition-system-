@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: face-recognition-system
+    runtime: python
+    plan: free
+    region: oregon
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: gunicorn -c gunicorn.conf.py run:app
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: BIOMETRIC_ENCRYPTION_KEY
+        value: W3dYvGqgV4u2N_VjS4w1n-X98oQ5P6a0M8b4Z2l1Y6A=
+      - key: FACENET_MODEL_NAME
+        value: ArcFace
+      - key: FACE_MATCH_THRESHOLD
+        value: "0.50"
+      - key: SAME_PERSON_THRESHOLD
+        value: "0.48"
+      - key: OPENBLAS_NUM_THREADS
+        value: "1"

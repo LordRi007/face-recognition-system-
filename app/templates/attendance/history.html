@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}Attendance History - {{ target_user.name }}{% endblock %}
+{% block page_header %}Personal Attendance Record{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-10">
+    <div class="card card-custom mb-4">
+      <div class="card-body-custom">
+        <form method="GET" action="{{ url_for('attendance.history') }}" class="row g-2 align-items-center">
+          <input type="hidden" name="user_id" value="{{ target_user.id }}">
+          <div class="col-md-4">
+            <label class="form-label small fw-semibold">Start Date</label>
+            <input type="date" name="start_date" class="form-control" value="{{ start_date or '' }}">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small fw-semibold">End Date</label>
+            <input type="date" name="end_date" class="form-control" value="{{ end_date or '' }}">
+          </div>
+          <div class="col-md-2 d-flex align-items-end">
+            <button type="submit" class="btn btn-outline-secondary w-100">
+              <i data-lucide="filter" style="width: 14px;"></i> Filter
+            </button>
+          </div>
+          <div class="col-md-2 d-flex align-items-end">
+            <a href="{{ url_for('attendance.export_csv') }}" class="btn btn-outline-primary w-100">
+              <i data-lucide="download" style="width: 14px;"></i> Export
+            </a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card card-custom">
+      <div class="card-header-custom">
+        <div class="d-flex align-items-center gap-2">
+          <i data-lucide="history" class="text-primary"></i>
+          <h6 class="mb-0 fw-bold">Records for {{ target_user.name }} ({{ records|length }})</h6>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-custom">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Check-In (UTC)</th>
+              <th>Check-Out (UTC)</th>
+              <th>Method</th>
+              <th>Status</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in records %}
+            <tr>
+              <td class="fw-semibold">{{ r.date.strftime('%Y-%m-%d') }}</td>
+              <td class="font-monospace">{{ r.check_in.strftime('%H:%M:%S') if r.check_in else '<span class="text-muted">&mdash;</span>'|safe }}</td>
+              <td class="font-monospace">{{ r.check_out.strftime('%H:%M:%S') if r.check_out else '<span class="text-muted">&mdash;</span>'|safe }}</td>
+              <td><span class="badge bg-light text-dark border">{{ r.verification_method }}</span></td>
+              <td>
+                {% if r.status == 'present' %}
+                  <span class="badge-status badge-present">Present</span>
+                {% elif r.status == 'late' %}
+                  <span class="badge-status badge-late">Late</span>
+                {% else %}
+                  <span class="badge-status badge-absent">{{ r.status|capitalize }}</span>
+                {% endif %}
+              </td>
+              <td class="small text-muted">{{ r.notes or '&mdash;'|safe }}</td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="6" class="text-center py-4 text-muted">No attendance history found.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

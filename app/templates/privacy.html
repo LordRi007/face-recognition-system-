@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Biometric Privacy & Consent Policy - {{ app_title }}{% endblock %}
+{% block page_header %}Biometric Privacy, Retention & Threat Model{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-9">
+    <div class="card card-custom mb-4">
+      <div class="card-header-custom">
+        <div class="d-flex align-items-center gap-2">
+          <i data-lucide="shield-check" class="text-success"></i>
+          <h5 class="mb-0 fw-bold">Biometric Privacy, Informed Consent & Security Policy</h5>
+        </div>
+        <span class="badge bg-success-subtle text-success">Version 1.0 (GDPR & CCPA Aligned)</span>
+      </div>
+      <div class="card-body-custom">
+        <section class="mb-4">
+          <h6 class="fw-bold text-primary">1. Purpose and Voluntary Participation</h6>
+          <p class="text-muted small">
+            The Face Recognition Management System (FRMS) is developed strictly for authenticated identity verification and voluntary attendance management within authorized organizations.
+            <strong>Biometric enrollment is strictly voluntary.</strong> Enrolled individuals are provided with clear, affirmative consent options prior to camera activation. Under no circumstances does FRMS perform covert surveillance, mass scanning of crowds, or identification of unknown individuals without their claimed identity.
+          </p>
+        </section>
+
+        <section class="mb-4">
+          <h6 class="fw-bold text-primary">2. Mathematical Vector Storage & Zero-Raw-Photo Policy</h6>
+          <p class="text-muted small">
+            FRMS converts facial landmarks into a non-reversible, 512-dimensional floating-point mathematical vector using the FaceNet512 neural architecture.
+            <strong>Raw camera snapshots and uploaded images are never stored in the database or persisted on disk.</strong>
+            They are processed in volatile memory and immediately discarded. Stored embedding vectors are encrypted at rest using AES-256 (Fernet) encryption keys stored in isolated server environment variables.
+          </p>
+        </section>
+
+        <section class="mb-4">
+          <h6 class="fw-bold text-primary">3. Data Retention and Right to Deletion</h6>
+          <p class="text-muted small">
+            Biometric embeddings are retained only for the duration of the user's active affiliation with the organization. Users or authorized administrators may revoke consent and permanently purge all facial embeddings at any time via the User Profile or User Management interface. Upon account deletion, all associated biometric templates and vectors are immediately and irreversibly wiped.
+          </p>
+        </section>
+
+        <section class="mb-4">
+          <h6 class="fw-bold text-primary">4. Alternative Non-Biometric Accommodations</h6>
+          <p class="text-muted small">
+            In accordance with international fair labor and privacy standards, no individual is penalized, disciplined, or denied access solely because facial verification fails or because they choose not to participate in biometric scanning. FRMS includes an integrated <strong>Alternative PIN Verification method</strong> and allows authorized supervisor manual check-in with complete audit trails.
+          </p>
+        </section>
+
+        <section class="mb-4">
+          <h6 class="fw-bold text-primary">5. Threat Model and Known Limitations</h6>
+          <p class="text-muted small mb-2">
+            Biometric systems inherently operate on probabilistic pattern matching rather than absolute cryptographic keys. FRMS accounts for the following known technical considerations:
+          </p>
+          <ul class="text-muted small">
+            <li><strong>False Rejections (FRR):</strong> Changes in facial hair, heavy makeup, direct harsh backlight, or camera blur may yield distances above the 0.30 cosine cutoff. The alternative PIN method guarantees uninterrupted check-in.</li>
+            <li><strong>False Acceptances (FAR):</strong> A model threshold of 0.30 cosine distance is calibrated to minimize false positive matches during 1-to-1 claimed identity verification.</li>
+            <li><strong>Presentation Attacks (Spoofing):</strong> FRMS applies high-frequency texture variance and edge analysis to detect printed paper or flat screen presentations. For high-security environments, supervised kiosk terminals or 3D depth cameras are recommended.</li>
+            <li><strong>Demographic Performance Differences:</strong> Pretrained models may exhibit minor variance across diverse lighting and skin tones. FRMS uses dynamic illumination quality gates to prompt users for adequate frontal light prior to capture.</li>
+          </ul>
+        </section>
+
+        <div class="alert alert-secondary py-3 mb-0 small">
+          <strong>Security Contact:</strong> For inquiries regarding biometric data storage or to request an automated data export under GDPR/CCPA data subject rights, please contact the designated Data Protection Officer (DPO) at your organization.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

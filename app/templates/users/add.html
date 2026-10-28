@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}Add New User{% endblock %}
+{% block page_header %}Register User{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <div class="card card-custom">
+      <div class="card-header-custom">
+        <div class="d-flex align-items-center gap-2">
+          <i data-lucide="user-plus" class="text-primary"></i>
+          <h6 class="mb-0 fw-bold">Create New User Account</h6>
+        </div>
+        <a href="{{ url_for('users.list_users') }}" class="btn btn-sm btn-outline-secondary">
+          &larr; Back to Directory
+        </a>
+      </div>
+      <div class="card-body-custom">
+        <form method="POST" action="{{ url_for('users.add_user') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label for="name" class="form-label small fw-semibold">Full Name *</label>
+              <input type="text" class="form-control" id="name" name="name" placeholder="e.g. Dr. Alex Morgan" required>
+            </div>
+            <div class="col-md-6">
+              <label for="email" class="form-label small fw-semibold">Email Address *</label>
+              <input type="email" class="form-control" id="email" name="email" placeholder="alex.morgan@company.com" required>
+            </div>
+          </div>
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label for="phone" class="form-label small fw-semibold">Phone Number (Optional)</label>
+              <input type="tel" class="form-control" id="phone" name="phone" placeholder="+1 (555) 019-2834">
+            </div>
+            <div class="col-md-6">
+              <label for="department_id" class="form-label small fw-semibold">Department</label>
+              <select class="form-select" id="department_id" name="department_id">
+                <option value="">Select Department (Optional)</option>
+                {% for dept in departments %}
+                <option value="{{ dept.id }}">{{ dept.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label for="role" class="form-label small fw-semibold">System Role *</label>
+              <select class="form-select" id="role" name="role" required>
+                <option value="user" selected>Regular User (Standard Member)</option>
+                <option value="staff">Staff (Can oversee check-ins & view logs)</option>
+                <option value="admin">Administrator (Full Access & Configuration)</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label for="pin" class="form-label small fw-semibold">Alternative PIN (Optional)</label>
+              <input type="password" maxlength="6" class="form-control" id="pin" name="pin" placeholder="4-6 digit numeric fallback">
+              <div class="form-text small">Used for non-biometric alternative verification.</div>
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <label for="password" class="form-label small fw-semibold">Initial Password *</label>
+            <input type="password" class="form-control" id="password" name="password" placeholder="Minimum 8 characters" required minlength="8">
+          </div>
+
+          <div class="d-flex justify-content-end gap-2">
+            <a href="{{ url_for('users.list_users') }}" class="btn btn-outline-secondary">Cancel</a>
+            <button type="submit" class="btn btn-primary-custom d-flex align-items-center gap-2">
+              <i data-lucide="check" style="width: 16px;"></i>
+              <span>Create Account</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

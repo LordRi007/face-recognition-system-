@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: frms_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: frms_db
+      POSTGRES_USER: frms_user
+      POSTGRES_PASSWORD: frms_secure_password_change_me
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U frms_user -d frms_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: .
+    container_name: frms_app
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      FLASK_ENV: production
+      DATABASE_URL: postgresql://frms_user:frms_secure_password_change_me@db:5432/frms_db
+      SECRET_KEY: change_me_to_a_secure_random_string_in_production
+      BIOMETRIC_ENCRYPTION_KEY: W3dYvGqgV4u2N_VjS4w1n-X98oQ5P6a0M8b4Z2l1Y6A=
+      GUNICORN_BIND: 0.0.0.0:5000
+      GUNICORN_WORKERS: 2
+      GUNICORN_TIMEOUT: 120
+    volumes:
+      - uploads_data:/app/uploads
+      - deepface_weights:/app/.deepface
+    ports:
+      - "5000:5000"
+
+volumes:
+  postgres_data:
+  uploads_data:
+  deepface_weights:

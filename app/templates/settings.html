@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}System Settings{% endblock %}
+{% block page_header %}AI Model & System Configuration{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <div class="card card-custom mb-4">
+      <div class="card-header-custom">
+        <div class="d-flex align-items-center gap-2">
+          <i data-lucide="sliders" class="text-primary"></i>
+          <h6 class="mb-0 fw-bold">Biometric & Recognition Parameters</h6>
+        </div>
+      </div>
+      <div class="card-body-custom">
+        <form method="POST" action="{{ url_for('dashboard.settings') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+          <!-- AI Model Threshold -->
+          <div class="mb-4">
+            <label for="face_match_threshold" class="form-label small fw-semibold">
+              FaceNet512 Match Cosine Distance Threshold
+            </label>
+            <div class="input-group">
+              <input type="number" step="0.01" min="0.10" max="0.80" class="form-control" id="face_match_threshold" name="face_match_threshold" value="{{ config.FACE_MATCH_THRESHOLD }}">
+              <span class="input-group-text small text-muted">&le; threshold = MATCH</span>
+            </div>
+            <div class="form-text small">
+              Lower values (e.g. 0.25) require stricter similarity, reducing False Accepts. Higher values (e.g. 0.35) are more tolerant of lighting changes. Recommended for FaceNet512: <strong>0.30</strong>.
+            </div>
+          </div>
+
+          <!-- Blur Threshold -->
+          <div class="mb-4">
+            <label for="quality_min_blur_score" class="form-label small fw-semibold">
+              Minimum Blur Sharpness (Laplacian Variance)
+            </label>
+            <input type="number" step="5" min="10" max="200" class="form-control" id="quality_min_blur_score" name="quality_min_blur_score" value="{{ config.QUALITY_MIN_BLUR_SCORE }}">
+            <div class="form-text small">
+              Frames with sharpness score below this cutoff are rejected as blurry to prevent poor embeddings. Default: <strong>70.0</strong>.
+            </div>
+          </div>
+
+          <!-- Brightness Min & Max -->
+          <div class="row g-3 mb-4">
+            <div class="col-md-6">
+              <label for="quality_min_brightness" class="form-label small fw-semibold">Minimum Illumination (0 - 255)</label>
+              <input type="number" step="5" min="10" max="100" class="form-control" id="quality_min_brightness" name="quality_min_brightness" value="{{ config.QUALITY_MIN_BRIGHTNESS }}">
+              <div class="form-text small">Reject frames that are underexposed/too dark. Default: <strong>40</strong>.</div>
+            </div>
+            <div class="col-md-6">
+              <label for="quality_max_brightness" class="form-label small fw-semibold">Maximum Illumination (0 - 255)</label>
+              <input type="number" step="5" min="150" max="250" class="form-control" id="quality_max_brightness" name="quality_max_brightness" value="{{ config.QUALITY_MAX_BRIGHTNESS }}">
+              <div class="form-text small">Reject frames that are overexposed/washed out. Default: <strong>225</strong>.</div>
+            </div>
+          </div>
+
+          <!-- Attendance Late Cutoff -->
+          <div class="mb-4">
+            <label for="attendance_late_threshold_time" class="form-label small fw-semibold">
+              Attendance Morning Late Cutoff Time (HH:MM:SS)
+            </label>
+            <input type="text" class="form-control" id="attendance_late_threshold_time" name="attendance_late_threshold_time" value="{{ config.ATTENDANCE_LATE_THRESHOLD_TIME }}">
+            <div class="form-text small">
+              Check-ins recorded past this UTC time are automatically flagged as "Late" with computed arrival delta.
+            </div>
+          </div>
+
+          <div class="d-flex justify-content-end">
+            <button type="submit" class="btn btn-primary-custom d-flex align-items-center gap-2">
+              <i data-lucide="save" style="width: 16px;"></i>
+              <span>Save System Parameters</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

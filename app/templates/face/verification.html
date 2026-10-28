@@ -1,0 +1,599 @@
+{% extends "base.html" %}
+
+{% block title %}Face Verification - {{ app_title }}{% endblock %}
+{% block page_header %}1-to-1 Identity Verification{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-10">
+    <div class="card card-custom mb-4">
+      <div class="card-body-custom">
+        <div class="row g-3 align-items-center">
+          <div class="col-md-7">
+            <label for="claimedUserSelect" class="form-label small fw-semibold">Claimed Identity (1-to-1 Verification)</label>
+            <div class="input-group">
+              <span class="input-group-text bg-transparent"><i data-lucide="user-check" style="width: 18px;"></i></span>
+              <select id="claimedUserSelect" class="form-select">
+                {% for u in users %}
+                <option value="{{ u.id }}" {% if u.id == preselected_id %}selected{% endif %} data-enrolled="{{ '1' if u.has_face_enrolled else '0' }}" data-pin="{{ '1' if u.pin_hash else '0' }}">
+                  {{ u.name }} ({{ u.email }}) {% if not u.has_face_enrolled %}[Face Not Enrolled]{% endif %}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+          <div class="col-md-5">
+            <div id="userEnrollmentBadge" class="p-2 rounded bg-light border text-center small mt-md-4">
+              <span class="fw-semibold">Biometric Status:</span> <span id="enrolledStatusText">Checking...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Verification Mode Tabs -->
+    <ul class="nav nav-pills mb-3 gap-2" id="verifyTab" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active d-flex align-items-center gap-2" id="webcam-tab" data-bs-toggle="pill" data-bs-target="#webcamMode" type="button" role="tab">
+          <i data-lucide="camera" style="width: 16px;"></i> Live Webcam
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link d-flex align-items-center gap-2" id="upload-tab" data-bs-toggle="pill" data-bs-target="#uploadMode" type="button" role="tab">
+          <i data-lucide="upload" style="width: 16px;"></i> Image Upload
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link d-flex align-items-center gap-2" id="pin-tab" data-bs-toggle="pill" data-bs-target="#pinMode" type="button" role="tab">
+          <i data-lucide="key" style="width: 16px;"></i> Alternative PIN Fallback
+        </button>
+      </li>
+    </ul>
+
+    <div class="tab-content" id="verifyTabContent">
+      <!-- Tab 1: Live Webcam Verification -->
+      <div class="tab-pane fade show active" id="webcamMode" role="tabpanel">
+        <div class="row g-4">
+          <div class="col-md-7">
+            <div class="card card-custom">
+              <div class="card-body-custom p-3">
+                <div class="camera-container" id="verifyCameraBox">
+                  <video id="verifyVideo" class="camera-video" playsinline autoplay muted></video>
+                  <div class="camera-overlay">
+                    <div class="d-flex justify-content-between align-items-center">
+                      <div class="camera-status-pill">
+                        <span class="spinner-grow spinner-grow-sm text-warning" id="verifyCamSpinner"></span>
+                        <span id="verifyCamStatus">Camera Standby</span>
+                      </div>
+                    </div>
+                    <div class="face-guide-oval" id="verifyGuideOval"></div>
+                    <div class="text-center text-white small" style="text-shadow: 0 1px 3px rgba(0,0,0,0.8);">
+                      Look directly into the camera. Hold steady.
+                    </div>
+                  </div>
+                </div>
+
+                <div class="mt-3 d-flex flex-wrap gap-2 justify-content-center align-items-center">
+                  <div class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 rounded-pill d-flex align-items-center gap-2" id="autoScannerPill">
+                    <span class="spinner-grow spinner-grow-sm text-primary" id="autoScannerSpinner" role="status" style="width: 10px; height: 10px;"></span>
+                    <span id="autoScannerText" class="fw-semibold">Auto-Scan Active: Look into camera to verify</span>
+                  </div>
+                  <button type="button" class="btn btn-outline-primary btn-sm rounded-pill d-none" id="rescanBtn">
+                    <i data-lucide="refresh-cw" style="width: 14px;"></i> Scan Again
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Outcome / Actions Column -->
+          <div class="col-md-5">
+            <div id="resultCard" class="card card-custom h-100">
+              <div class="card-header-custom">
+                <h6 class="mb-0 fw-bold">Verification Result</h6>
+              </div>
+              <div class="card-body-custom d-flex flex-column align-items-center justify-content-center text-center p-4">
+                <div id="resultIconWrapper" class="stat-icon stat-icon-blue mb-3" style="width: 64px; height: 64px;">
+                  <i data-lucide="scan" style="width: 32px; height: 32px;"></i>
+                </div>
+                <h5 id="resultHeading" class="fw-bold mb-1">Live Auto-Scanning</h5>
+                <p id="resultMessage" class="text-muted small mb-3">
+                  Position your face inside the oval guide. The system will automatically detect and verify your identity.
+                </p>
+
+                <div id="metricsRow" class="w-100 small mb-3 d-none">
+                  <div class="d-flex justify-content-between py-1 border-bottom">
+                    <span class="text-muted">Biometric Similarity:</span>
+                    <span id="metricSimilarity" class="font-monospace fw-bold text-primary">&mdash;</span>
+                  </div>
+                  <div class="d-flex justify-content-between py-1 border-bottom">
+                    <span class="text-muted">Cosine Distance:</span>
+                    <span id="metricDistance" class="font-monospace fw-bold">&mdash;</span>
+                  </div>
+                  <div class="d-flex justify-content-between py-1 border-bottom">
+                    <span class="text-muted">ArcFace Threshold:</span>
+                    <span id="metricThreshold" class="font-monospace">&le; 0.50</span>
+                  </div>
+                </div>
+
+                <!-- Instant Attendance Check-In / Check-Out Actions -->
+                <div id="attendanceActions" class="w-100 mt-2 d-none">
+                  <div class="d-grid gap-2">
+                    <button type="button" class="btn btn-success d-flex align-items-center justify-content-center gap-2" id="checkInBtn">
+                      <i data-lucide="calendar-check" style="width: 18px;"></i>
+                      <span>Record Check-In</span>
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary d-flex align-items-center justify-content-center gap-2" id="checkOutBtn">
+                      <i data-lucide="calendar-x" style="width: 18px;"></i>
+                      <span>Record Check-Out</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 2: Image Upload Verification -->
+      <div class="tab-pane fade" id="uploadMode" role="tabpanel">
+        <div class="card card-custom p-4">
+          <h6 class="fw-bold mb-3">Upload Image for 1-to-1 Verification</h6>
+          <p class="text-muted small mb-3">
+            Select a clear, front-facing image (JPEG or PNG, max 16MB) to verify against the claimed user template.
+          </p>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <input type="file" id="uploadFileInput" class="form-control" accept="image/jpeg,image/png,image/webp">
+              <div class="mt-3 text-center">
+                <img id="uploadPreview" src="" alt="Preview" class="img-fluid rounded border d-none" style="max-height: 240px;">
+              </div>
+            </div>
+            <div class="col-md-6 d-flex align-items-center">
+              <button type="button" id="uploadVerifyBtn" class="btn btn-primary-custom w-100 py-2 d-flex align-items-center justify-content-center gap-2" disabled>
+                <i data-lucide="check-circle-2" style="width: 18px;"></i>
+                <span>Verify Uploaded Image</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 3: Alternative PIN Fallback -->
+      <div class="tab-pane fade" id="pinMode" role="tabpanel">
+        <div class="card card-custom p-4 col-md-6 mx-auto">
+          <div class="text-center mb-3">
+            <div class="stat-icon stat-icon-amber mx-auto mb-2" style="width: 48px; height: 48px;">
+              <i data-lucide="key" style="width: 24px; height: 24px;"></i>
+            </div>
+            <h6 class="fw-bold mb-1">Non-Biometric PIN Verification</h6>
+            <p class="text-muted small mb-0">
+              For users with camera issues or those who have opted out of facial biometrics.
+            </p>
+          </div>
+          <div class="mb-3">
+            <label for="pinInput" class="form-label small fw-semibold">Enter 4-6 Digit User PIN</label>
+            <input type="password" maxlength="6" id="pinInput" class="form-control text-center fs-4 font-monospace" placeholder="&bull;&bull;&bull;&bull;" autocomplete="off">
+          </div>
+          <button type="button" id="pinVerifyBtn" class="btn btn-primary-custom w-100 py-2 d-flex align-items-center justify-content-center gap-2">
+            <i data-lucide="unlock" style="width: 18px;"></i>
+            <span>Verify PIN & Check In</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/webcam.js') }}"></script>
+<script>
+  let verifyWebcam = null;
+  const userSelect = document.getElementById("claimedUserSelect");
+  const enrolledBadge = document.getElementById("enrolledStatusText");
+  const statusText = document.getElementById("verifyCamStatus");
+  const spinner = document.getElementById("verifyCamSpinner");
+  const guideOval = document.getElementById("verifyGuideOval");
+
+  const autoScannerPill = document.getElementById("autoScannerPill");
+  const autoScannerSpinner = document.getElementById("autoScannerSpinner");
+  const autoScannerText = document.getElementById("autoScannerText");
+  const rescanBtn = document.getElementById("rescanBtn");
+
+  // Results
+  const resultHeading = document.getElementById("resultHeading");
+  const resultMessage = document.getElementById("resultMessage");
+  const resultIconWrapper = document.getElementById("resultIconWrapper");
+  const metricsRow = document.getElementById("metricsRow");
+  const metricDist = document.getElementById("metricDistance");
+  const metricThresh = document.getElementById("metricThreshold");
+  const attendanceActions = document.getElementById("attendanceActions");
+  const checkInBtn = document.getElementById("checkInBtn");
+  const checkOutBtn = document.getElementById("checkOutBtn");
+
+  // Upload elements
+  const uploadFileInput = document.getElementById("uploadFileInput");
+  const uploadPreview = document.getElementById("uploadPreview");
+  const uploadVerifyBtn = document.getElementById("uploadVerifyBtn");
+
+  // PIN elements
+  const pinInput = document.getElementById("pinInput");
+  const pinVerifyBtn = document.getElementById("pinVerifyBtn");
+
+  let lastVerifiedUserId = null;
+  let autoScanInterval = null;
+  let isScanningFrame = false;
+  let isVerified = false;
+  let scanCooldownUntil = 0;
+  let isTabActive = true;
+
+  document.addEventListener("DOMContentLoaded", () => {
+    updateEnrolledBadge();
+
+    userSelect.addEventListener("change", () => {
+      updateEnrolledBadge();
+      resetVerificationState();
+    });
+
+    verifyWebcam = new WebcamController({
+      onStatusChange: (s) => {
+        statusText.innerText = s.message;
+        if (s.status === "streaming") {
+          spinner.className = "spinner-grow spinner-grow-sm text-success";
+          startAutoScanLoop();
+        } else {
+          spinner.className = "spinner-grow spinner-grow-sm text-danger";
+          stopAutoScanLoop();
+        }
+      }
+    });
+
+    if (rescanBtn) {
+      rescanBtn.addEventListener("click", resetVerificationState);
+    }
+
+    // Auto-turn on camera immediately on page load
+    autoStartVerifyCamera();
+
+    // Tab switching support
+    const verifyTabEl = document.getElementById("verifyTab");
+    if (verifyTabEl) {
+      verifyTabEl.addEventListener("shown.bs.tab", (e) => {
+        isTabActive = (e.target.id === "webcam-tab");
+        if (isTabActive && !isVerified) {
+          resetVerificationState();
+        }
+      });
+    }
+
+    // Upload handling
+    uploadFileInput.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (re) => {
+          uploadPreview.src = re.target.result;
+          uploadPreview.classList.remove("d-none");
+          uploadVerifyBtn.disabled = false;
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    uploadVerifyBtn.addEventListener("click", async () => {
+      if (uploadPreview.src) {
+        await sendVerificationRequest(uploadPreview.src, "upload");
+      }
+    });
+
+    // PIN Verification
+    pinVerifyBtn.addEventListener("click", async () => {
+      const pin = pinInput.value.trim();
+      if (!pin) {
+        alert("Please enter your PIN.");
+        return;
+      }
+      const userId = userSelect.value;
+      const res = await fetch("/api/face/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId, pin: pin })
+      });
+      const data = await res.json();
+      if (res.ok && data.verified) {
+        displayVerificationSuccess(data.user, null, null, "alternative_pin");
+        // Auto check in
+        await triggerAttendance(userId, "alternative_pin", "check-in");
+      } else {
+        displayVerificationFailure(data.error || "PIN is incorrect.");
+      }
+    });
+
+    // Attendance buttons
+    checkInBtn.addEventListener("click", async () => {
+      if (lastVerifiedUserId) {
+        await triggerAttendance(lastVerifiedUserId, "facial", "check-in");
+      }
+    });
+    checkOutBtn.addEventListener("click", async () => {
+      if (lastVerifiedUserId) {
+        await triggerAttendance(lastVerifiedUserId, "facial", "check-out");
+      }
+    });
+  });
+
+  async function autoStartVerifyCamera() {
+    statusText.innerText = "Connecting camera...";
+    spinner.className = "spinner-grow spinner-grow-sm text-warning";
+    try {
+      await verifyWebcam.start("verifyVideo");
+    } catch (err) {
+      statusText.innerText = "Camera error";
+      spinner.className = "spinner-grow spinner-grow-sm text-danger";
+      if (autoScannerPill) {
+        autoScannerPill.className = "badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 rounded-pill d-flex align-items-center gap-2";
+      }
+      if (autoScannerText) {
+        autoScannerText.innerHTML = `<span>Camera access failed: ${err.message}</span> <button class="btn btn-xs btn-outline-danger py-0 px-2 ms-2" onclick="autoStartVerifyCamera()"><i data-lucide="refresh-cw" style="width:12px;"></i> Retry</button>`;
+      }
+      if (window.lucide) lucide.createIcons();
+    }
+  }
+
+  function startAutoScanLoop() {
+    if (autoScanInterval) clearInterval(autoScanInterval);
+    autoScanInterval = setInterval(autoScanTick, 750);
+  }
+
+  function stopAutoScanLoop() {
+    if (autoScanInterval) {
+      clearInterval(autoScanInterval);
+      autoScanInterval = null;
+    }
+  }
+
+  async function autoScanTick() {
+    if (!verifyWebcam || !verifyWebcam.stream || !isTabActive || isScanningFrame || isVerified) {
+      return;
+    }
+
+    if (Date.now() < scanCooldownUntil) {
+      return;
+    }
+
+    const selectedOption = userSelect.options[userSelect.selectedIndex];
+    const isEnrolled = selectedOption ? selectedOption.getAttribute("data-enrolled") === "1" : false;
+
+    if (!isEnrolled) {
+      guideOval.className = "face-guide-oval warning";
+      autoScannerPill.className = "badge bg-warning-subtle text-warning border border-warning-subtle px-3 py-2 rounded-pill d-flex align-items-center gap-2";
+      autoScannerSpinner.className = "spinner-grow spinner-grow-sm text-warning d-none";
+      autoScannerText.innerText = "Claimed user has no face enrolled";
+      return;
+    }
+
+    isScanningFrame = true;
+    try {
+      const frameData = verifyWebcam.captureBase64(0.85);
+
+      // Lightweight face detection & quality evaluation
+      const detRes = await fetch("/api/face/detect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: frameData })
+      });
+
+      if (!detRes.ok) {
+        isScanningFrame = false;
+        return;
+      }
+
+      const detData = await detRes.json();
+      if (!detData.success) {
+        isScanningFrame = false;
+        return;
+      }
+
+      if (detData.face_count === 0) {
+        guideOval.className = "face-guide-oval";
+        autoScannerPill.className = "badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 rounded-pill d-flex align-items-center gap-2";
+        autoScannerSpinner.className = "spinner-grow spinner-grow-sm text-primary";
+        autoScannerText.innerText = "Auto-Scanning: Looking for face...";
+        isScanningFrame = false;
+        return;
+      }
+
+      if (detData.face_count > 1) {
+        guideOval.className = "face-guide-oval warning";
+        autoScannerPill.className = "badge bg-warning-subtle text-warning border border-warning-subtle px-3 py-2 rounded-pill d-flex align-items-center gap-2";
+        autoScannerSpinner.className = "spinner-grow spinner-grow-sm text-warning";
+        autoScannerText.innerText = "Multiple faces detected. 1 person only.";
+        isScanningFrame = false;
+        return;
+      }
+
+      // Exactly 1 face aligned and centered!
+      guideOval.className = "face-guide-oval ready";
+      autoScannerPill.className = "badge bg-info-subtle text-info border border-info-subtle px-3 py-2 rounded-pill d-flex align-items-center gap-2";
+      autoScannerSpinner.className = "spinner-grow spinner-grow-sm text-info";
+      autoScannerText.innerText = "Face Aligned! Verifying biometrics...";
+
+      // Perform automatic 1-to-1 biometric verification
+      await sendVerificationRequest(frameData, "webcam_auto");
+
+    } catch (err) {
+      console.warn("Auto-scan loop error:", err);
+    } finally {
+      isScanningFrame = false;
+    }
+  }
+
+  function resetVerificationState() {
+    isVerified = false;
+    isScanningFrame = false;
+    scanCooldownUntil = 0;
+    if (rescanBtn) rescanBtn.classList.add("d-none");
+    if (guideOval) guideOval.className = "face-guide-oval";
+    if (autoScannerPill) {
+      autoScannerPill.className = "badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 rounded-pill d-flex align-items-center gap-2";
+    }
+    if (autoScannerSpinner) {
+      autoScannerSpinner.className = "spinner-grow spinner-grow-sm text-primary";
+    }
+    if (autoScannerText) {
+      autoScannerText.innerText = "Auto-Scan Active: Look into camera to verify";
+    }
+
+    if (resultIconWrapper) {
+      resultIconWrapper.className = "stat-icon stat-icon-blue mb-3";
+      resultIconWrapper.innerHTML = '<i data-lucide="scan" style="width: 32px; height: 32px;"></i>';
+    }
+    if (resultHeading) {
+      resultHeading.className = "fw-bold mb-1";
+      resultHeading.innerText = "Live Auto-Scanning";
+    }
+    if (resultMessage) {
+      resultMessage.innerText = "Position your face inside the oval guide. The system will automatically detect and verify your identity.";
+    }
+    if (metricsRow) metricsRow.classList.add("d-none");
+    if (attendanceActions) attendanceActions.classList.add("d-none");
+    lastVerifiedUserId = null;
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function updateEnrolledBadge() {
+    const selected = userSelect.options[userSelect.selectedIndex];
+    const isEnrolled = selected ? selected.getAttribute("data-enrolled") === "1" : false;
+    if (isEnrolled) {
+      enrolledBadge.innerHTML = '<span class="text-success fw-bold"><i data-lucide="check" style="width:14px;"></i> Enrolled (Ready)</span>';
+    } else {
+      enrolledBadge.innerHTML = '<span class="text-danger fw-bold"><i data-lucide="alert-circle" style="width:14px;"></i> No Face Enrolled</span>';
+    }
+    if (window.lucide) lucide.createIcons();
+  }
+
+  async function sendVerificationRequest(imageData, method) {
+    const userId = userSelect.value;
+    if (method === "upload") {
+      uploadVerifyBtn.disabled = true;
+      uploadVerifyBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Comparing Biometrics...';
+    }
+
+    try {
+      const res = await fetch("/api/face/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: userId,
+          image: imageData,
+          method: method
+        })
+      });
+
+      const data = await res.json();
+      if (method === "upload") {
+        uploadVerifyBtn.disabled = false;
+        uploadVerifyBtn.innerHTML = '<i data-lucide="check-circle-2" style="width: 18px;"></i><span>Verify Uploaded Image</span>';
+      }
+
+      if (res.ok && data.verified) {
+        isVerified = true;
+        guideOval.className = "face-guide-oval ready";
+        autoScannerPill.className = "badge bg-success text-white px-3 py-2 rounded-pill d-flex align-items-center gap-2 shadow-sm";
+        autoScannerSpinner.className = "spinner-grow spinner-grow-sm text-white d-none";
+        autoScannerText.innerHTML = `<i data-lucide="check-circle" style="width:15px; height:15px;"></i> Verified: ${data.user.name}`;
+        rescanBtn.classList.remove("d-none");
+        displayVerificationSuccess(data.user, data.distance, data.threshold, data.similarity_pct, method);
+        if (window.lucide) lucide.createIcons();
+      } else {
+        guideOval.className = "face-guide-oval warning";
+        autoScannerPill.className = "badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 rounded-pill d-flex align-items-center gap-2";
+        autoScannerSpinner.className = "spinner-grow spinner-grow-sm text-danger";
+        autoScannerText.innerText = "Mismatch: Face did not match claimed user. Retrying in 3s...";
+        scanCooldownUntil = Date.now() + 3000;
+        displayVerificationFailure(data.message || data.error || "Identity could not be verified.", data.distance, data.threshold, data.similarity_pct);
+      }
+    } catch (err) {
+      if (method === "upload") {
+        uploadVerifyBtn.disabled = false;
+        uploadVerifyBtn.innerHTML = '<i data-lucide="check-circle-2" style="width: 18px;"></i><span>Verify Uploaded Image</span>';
+      }
+      guideOval.className = "face-guide-oval warning";
+      displayVerificationFailure("Network or server error during verification: " + err.message);
+      scanCooldownUntil = Date.now() + 3000;
+      if (window.lucide) lucide.createIcons();
+    }
+  }
+
+  function displayVerificationSuccess(user, distance, threshold, similarity, method) {
+    lastVerifiedUserId = user.id;
+    guideOval.className = "face-guide-oval ready";
+    resultIconWrapper.className = "stat-icon stat-icon-green mb-3";
+    resultIconWrapper.innerHTML = '<i data-lucide="check-circle" style="width: 32px; height: 32px;"></i>';
+    resultHeading.className = "fw-bold mb-1 text-success";
+    resultHeading.innerText = "Identity Confirmed!";
+    resultMessage.innerHTML = `Successfully verified as <strong>${user.name}</strong>.`;
+
+    if (distance !== null && distance !== undefined) {
+      metricsRow.classList.remove("d-none");
+      metricDist.innerText = distance.toFixed(4);
+      metricThresh.innerText = `\u2264 ${threshold}`;
+      const simElem = document.getElementById("metricSimilarity");
+      if (simElem) {
+        simElem.innerText = similarity !== undefined && similarity !== null ? `${similarity}%` : `${Math.max(0, ((1 - distance/0.7)*100)).toFixed(1)}%`;
+      }
+    } else {
+      metricsRow.classList.add("d-none");
+    }
+
+    attendanceActions.classList.remove("d-none");
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function displayVerificationFailure(message, distance, threshold, similarity) {
+    lastVerifiedUserId = null;
+    guideOval.className = "face-guide-oval warning";
+    resultIconWrapper.className = "stat-icon stat-icon-red mb-3";
+    resultIconWrapper.innerHTML = '<i data-lucide="x-circle" style="width: 32px; height: 32px;"></i>';
+    resultHeading.className = "fw-bold mb-1 text-danger";
+    resultHeading.innerText = "Verification Failed";
+    resultMessage.innerText = message;
+
+    if (distance !== null && distance !== undefined) {
+      metricsRow.classList.remove("d-none");
+      metricDist.innerText = distance.toFixed(4);
+      metricThresh.innerText = `\u2264 ${threshold}`;
+      const simElem = document.getElementById("metricSimilarity");
+      if (simElem) {
+        simElem.innerText = similarity !== undefined && similarity !== null ? `${similarity}%` : `${Math.max(0, ((1 - distance/0.7)*100)).toFixed(1)}%`;
+      }
+    } else {
+      metricsRow.classList.add("d-none");
+    }
+
+    attendanceActions.classList.add("d-none");
+    if (window.lucide) lucide.createIcons();
+  }
+
+  async function triggerAttendance(userId, method, actionType) {
+    const endpoint = actionType === "check-out" ? "/api/attendance/check-out" : "/api/attendance/check-in";
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId, method: method })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        alert(data.message);
+        window.location.href = "/attendance";
+      } else {
+        alert(data.message || data.error);
+      }
+    } catch (err) {
+      alert("Error logging attendance: " + err.message);
+    }
+  }
+</script>
+{% endblock %}

@@ -1,0 +1,313 @@
+{% extends "base.html" %}
+
+{% block title %}Face Biometric Enrollment{% endblock %}
+{% block page_header %}Face Biometric Enrollment{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-10">
+    <!-- Informed Consent Alert Banner -->
+    <div class="card card-custom mb-4 border-primary">
+      <div class="card-body-custom">
+        <div class="d-flex align-items-start gap-3">
+          <div class="p-2 rounded bg-primary-subtle text-primary">
+            <i data-lucide="shield-alert" style="width: 24px; height: 24px;"></i>
+          </div>
+          <div class="flex-grow-1">
+            <h6 class="fw-bold mb-1">Informed Biometric Consent Notice</h6>
+            <p class="text-muted small mb-2">
+              By proceeding with face enrollment, you explicitly consent to the extraction and mathematical conversion of your facial landmarks into an encrypted 512-dimensional vector.
+              <strong>Raw facial photographs are never stored on this server.</strong>
+              Biometric embeddings are encrypted with AES-256 and used solely for identity verification and attendance tracking within this organization. You maintain the right to revoke consent and permanently purge your biometric vectors at any time.
+            </p>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="consentCheckbox" checked>
+              <label class="form-check-label fw-semibold small" for="consentCheckbox">
+                I have read, understood, and voluntarily agree to the biometric enrollment policy.
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-4">
+      <!-- Camera Preview Column -->
+      <div class="col-md-7">
+        <div class="card card-custom">
+          <div class="card-header-custom">
+            <div class="d-flex align-items-center gap-2">
+              <i data-lucide="video" class="text-primary"></i>
+              <h6 class="mb-0 fw-bold">Live Camera Feed</h6>
+            </div>
+            <div class="d-flex gap-2">
+              <select id="cameraSelect" class="form-select form-select-sm d-none" style="max-width: 160px;"></select>
+            </div>
+          </div>
+          <div class="card-body-custom p-3">
+            <div class="camera-container" id="cameraBox">
+              <video id="webcamVideo" class="camera-video" playsinline autoplay muted></video>
+              <div class="camera-overlay">
+                <div class="d-flex justify-content-between align-items-center">
+                  <div class="camera-status-pill" id="cameraStatusPill">
+                    <span class="spinner-grow spinner-grow-sm text-warning" id="cameraSpinner"></span>
+                    <span id="cameraStatusText">Camera Off</span>
+                  </div>
+                  <div class="camera-status-pill" id="faceDetectedBadge" style="display: none;">
+                    <i data-lucide="user-check" style="width: 14px;"></i>
+                    <span id="faceCountText">0 Faces</span>
+                  </div>
+                </div>
+
+                <!-- Guided Oval Overlay -->
+                <div class="face-guide-oval" id="faceGuideOval"></div>
+
+                <!-- Bottom Hint -->
+                <div class="text-center text-white small" style="text-shadow: 0 1px 3px rgba(0,0,0,0.8);">
+                  Center face within the oval. Ensure even lighting.
+                </div>
+              </div>
+            </div>
+
+            <!-- Camera Controls -->
+            <div class="mt-3 d-flex flex-wrap gap-2 justify-content-center">
+              <button type="button" class="btn btn-primary-custom px-4 py-2 d-flex align-items-center gap-2" id="captureEnrollBtn" disabled>
+                <i data-lucide="scan-face" style="width: 18px;"></i>
+                <span>Capture & Enroll Face</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Quality Evaluation & User Details Column -->
+      <div class="col-md-5">
+        <div class="card card-custom mb-3">
+          <div class="card-header-custom">
+            <div class="d-flex align-items-center gap-2">
+              <i data-lucide="user" class="text-primary"></i>
+              <h6 class="mb-0 fw-bold">Target Identity</h6>
+            </div>
+          </div>
+          <div class="card-body-custom">
+            <div class="d-flex align-items-center gap-3 mb-3">
+              <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold" style="width: 48px; height: 48px; font-size: 1.2rem;">
+                {{ target_user.name[:2].upper() }}
+              </div>
+              <div>
+                <h6 class="fw-bold mb-0">{{ target_user.name }}</h6>
+                <div class="text-muted small">{{ target_user.email }}</div>
+                <div class="badge bg-secondary-subtle text-secondary small mt-1">ID: #{{ target_user.id }}</div>
+              </div>
+            </div>
+
+            {% if target_user.has_face_enrolled %}
+            <div class="alert alert-info py-2 small mb-0">
+              <i data-lucide="info" style="width: 14px;"></i> This user already has an active enrolled face. Re-enrolling will replace the existing biometric template with new embeddings.
+            </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Live Quality & Verification Criteria -->
+        <div class="card card-custom">
+          <div class="card-header-custom">
+            <div class="d-flex align-items-center gap-2">
+              <i data-lucide="check-square" class="text-primary"></i>
+              <h6 class="mb-0 fw-bold">Enrollment Quality Checks</h6>
+            </div>
+          </div>
+          <div class="card-body-custom small">
+            <div class="mb-3">
+              <div class="d-flex justify-content-between mb-1">
+                <span class="text-muted">Face Count:</span>
+                <span id="qualityFaceCount" class="fw-bold text-muted">&mdash;</span>
+              </div>
+              <div class="form-text" style="font-size: 0.75rem;">Must be exactly 1 face in camera frame.</div>
+            </div>
+
+            <div class="mb-3">
+              <div class="d-flex justify-content-between mb-1">
+                <span class="text-muted">Image Sharpness (Blur Metric):</span>
+                <span id="qualityBlurScore" class="fw-bold text-muted">&mdash;</span>
+              </div>
+              <div class="progress" style="height: 6px;">
+                <div id="blurProgressBar" class="progress-bar bg-warning" role="progressbar" style="width: 0%"></div>
+              </div>
+              <div class="form-text" style="font-size: 0.75rem;">Requires &ge; 70.0 Laplacian variance.</div>
+            </div>
+
+            <div class="mb-3">
+              <div class="d-flex justify-content-between mb-1">
+                <span class="text-muted">Illumination (Brightness):</span>
+                <span id="qualityBrightness" class="fw-bold text-muted">&mdash;</span>
+              </div>
+              <div class="progress" style="height: 6px;">
+                <div id="brightProgressBar" class="progress-bar bg-info" role="progressbar" style="width: 0%"></div>
+              </div>
+              <div class="form-text" style="font-size: 0.75rem;">Optimal range: 40 - 225 mean grayscale.</div>
+            </div>
+
+            <div id="enrollmentStatusAlert" class="alert alert-secondary py-2 mb-0 text-center">
+              Please check the consent box and start camera to begin.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/webcam.js') }}"></script>
+<script>
+  let webcam = null;
+  const targetUserId = {{ target_user.id }};
+  const consentBox = document.getElementById("consentCheckbox");
+  const captureBtn = document.getElementById("captureEnrollBtn");
+  const statusPill = document.getElementById("cameraStatusPill");
+  const statusText = document.getElementById("cameraStatusText");
+  const statusSpinner = document.getElementById("cameraSpinner");
+  const guideOval = document.getElementById("faceGuideOval");
+  const statusAlert = document.getElementById("enrollmentStatusAlert");
+  const qualityFace = document.getElementById("qualityFaceCount");
+  const qualityBlur = document.getElementById("qualityBlurScore");
+  const qualityBright = document.getElementById("qualityBrightness");
+  const blurBar = document.getElementById("blurProgressBar");
+  const brightBar = document.getElementById("brightProgressBar");
+
+  document.addEventListener("DOMContentLoaded", () => {
+    webcam = new WebcamController({
+      onStatusChange: (s) => {
+        statusText.innerText = s.message;
+        if (s.status === "streaming") {
+          statusSpinner.className = "spinner-grow spinner-grow-sm text-success";
+          checkCaptureReady();
+        } else {
+          statusSpinner.className = "spinner-grow spinner-grow-sm text-danger";
+          captureBtn.disabled = true;
+        }
+      },
+      onQualityUpdate: (data) => {
+        updateQualityIndicators(data);
+      }
+    });
+
+    consentBox.addEventListener("change", () => {
+      checkCaptureReady();
+    });
+
+    captureBtn.addEventListener("click", async () => {
+      await performEnrollment();
+    });
+
+    // Auto-turn on camera immediately on page load
+    autoStartEnrollmentCamera();
+  });
+
+  async function autoStartEnrollmentCamera() {
+    statusText.innerText = "Connecting camera...";
+    statusSpinner.className = "spinner-grow spinner-grow-sm text-warning";
+    try {
+      await webcam.start("webcamVideo");
+      webcam.startLiveAnalysis(1500);
+    } catch (err) {
+      statusText.innerText = "Camera error";
+      statusSpinner.className = "spinner-grow spinner-grow-sm text-danger";
+      statusAlert.className = "alert alert-danger py-2 mb-0 text-center";
+      statusAlert.innerHTML = `<strong>Camera access failed:</strong> ${err.message}. <button class="btn btn-sm btn-outline-danger ms-2" onclick="autoStartEnrollmentCamera()"><i data-lucide="refresh-cw" style="width:12px;"></i> Retry</button>`;
+      if (window.lucide) lucide.createIcons();
+    }
+  }
+
+  function checkCaptureReady() {
+    if (consentBox.checked && webcam && webcam.stream) {
+      captureBtn.disabled = false;
+      statusAlert.className = "alert alert-info py-2 mb-0 text-center";
+      statusAlert.innerHTML = "Center your face in the oval and click <strong>Capture & Enroll Face</strong>.";
+    } else {
+      captureBtn.disabled = true;
+      if (!consentBox.checked) {
+        statusAlert.className = "alert alert-warning py-2 mb-0 text-center";
+        statusAlert.innerText = "Please acknowledge informed consent first.";
+      }
+    }
+  }
+
+  function updateQualityIndicators(data) {
+    if (!data.quality) return;
+
+    qualityFace.innerText = data.face_count === 1 ? "1 Face Detected (OK)" : `${data.face_count} Faces`;
+    qualityFace.className = data.face_count === 1 ? "fw-bold text-success" : "fw-bold text-danger";
+
+    qualityBlur.innerText = `${data.quality.blur_score}`;
+    const blurPct = Math.min(100, (data.quality.blur_score / 150) * 100);
+    blurBar.style.width = blurPct + "%";
+    blurBar.className = data.quality.blur_score >= 70 ? "progress-bar bg-success" : "progress-bar bg-warning";
+
+    qualityBright.innerText = `${data.quality.brightness}`;
+    const brightPct = Math.min(100, (data.quality.brightness / 255) * 100);
+    brightBar.style.width = brightPct + "%";
+    brightBar.className = (data.quality.brightness >= 40 && data.quality.brightness <= 225) ? "progress-bar bg-success" : "progress-bar bg-warning";
+
+    if (data.is_ready_for_enrollment) {
+      guideOval.className = "face-guide-oval ready";
+      if (consentBox.checked) {
+        statusAlert.className = "alert alert-success py-2 mb-0 text-center";
+        statusAlert.innerHTML = '<i data-lucide="check-circle" style="width:16px;"></i> Ready for capture! Hold still.';
+        if (window.lucide) lucide.createIcons();
+      }
+    } else {
+      guideOval.className = "face-guide-oval warning";
+    }
+  }
+
+  async function performEnrollment() {
+    if (!consentBox.checked) {
+      alert("Informed consent is mandatory.");
+      return;
+    }
+
+    captureBtn.disabled = true;
+    captureBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Extracting FaceNet512 Biometrics...';
+
+    try {
+      const frameData = webcam.captureBase64(0.92);
+
+      const res = await fetch("/api/face/enroll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: targetUserId,
+          consent_agreed: true,
+          image: frameData
+        }),
+      });
+
+      const result = await res.json();
+      if (res.ok && result.success) {
+        guideOval.className = "face-guide-oval ready";
+        statusAlert.className = "alert alert-success py-2 mb-0 text-center";
+        statusAlert.innerHTML = `<strong>Success!</strong> ${result.message}`;
+        setTimeout(() => {
+          window.location.href = `/users/${targetUserId}`;
+        }, 1500);
+      } else {
+        guideOval.className = "face-guide-oval warning";
+        statusAlert.className = "alert alert-danger py-2 mb-0 text-center";
+        statusAlert.innerText = result.error || "Enrollment failed.";
+        captureBtn.disabled = false;
+        captureBtn.innerHTML = '<i data-lucide="scan-face" style="width: 18px;"></i><span>Capture & Enroll Face</span>';
+        if (window.lucide) lucide.createIcons();
+      }
+    } catch (err) {
+      statusAlert.className = "alert alert-danger py-2 mb-0 text-center";
+      statusAlert.innerText = "Network or server error during enrollment: " + err.message;
+      captureBtn.disabled = false;
+      captureBtn.innerHTML = '<i data-lucide="scan-face" style="width: 18px;"></i><span>Capture & Enroll Face</span>';
+      if (window.lucide) lucide.createIcons();
+    }
+  }
+</script>
+{% endblock %}

@@ -1,0 +1,1504 @@
+{% extends "base.html" %}
+
+{% block title %}Camera Face Mood & Feeling Tracker{% endblock %}
+{% block page_header %}AI Face Mood & Feeling Tracker{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* Fullscreen Camera Styles */
+  #cameraBox:fullscreen,
+  #cameraBox:-webkit-full-screen {
+    width: 100vw !important;
+    height: 100vh !important;
+    min-height: 100vh !important;
+    border-radius: 0 !important;
+    background: #000000 !important;
+  }
+
+  .camera-box-fullscreen {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    min-height: 100vh !important;
+    z-index: 999999 !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    background: #000000 !important;
+  }
+
+  .camera-box-fullscreen video,
+  .camera-box-fullscreen img {
+    border-radius: 0 !important;
+  }
+
+  .hud-btn-glass {
+    background: rgba(15, 23, 42, 0.78);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.20);
+    color: #ffffff;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .hud-btn-glass:hover {
+    background: rgba(30, 41, 59, 0.95);
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.40);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  }
+
+  /* Fullscreen Floating Controls bar */
+  .fs-floating-bar {
+    background: rgba(15, 23, 42, 0.88);
+    backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+    animation: fadeInSlideUp 0.3s ease-out;
+  }
+  @keyframes fadeInSlideUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  <!-- Left Column: Camera Feed & Real-Time Tracking HUD -->
+  <div class="col-lg-7">
+    <div class="card card-custom">
+      <div class="card-header-custom d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center gap-2">
+          <i data-lucide="smile" class="text-primary"></i>
+          <h6 class="mb-0 fw-bold">Live Facial Mood Camera</h6>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge bg-success-subtle text-success px-2 py-1" id="trackingStatusBadge">
+            <i data-lucide="activity" style="width: 14px;"></i> Standby
+          </span>
+          <select id="cameraSelect" class="form-select form-select-sm d-none" style="max-width: 150px;"></select>
+          <button type="button" class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" id="headerFsBtn" title="Toggle Fullscreen Camera">
+            <i data-lucide="maximize-2" id="headerFsIcon" style="width: 14px;"></i>
+            <span class="small d-none d-sm-inline">Full Screen</span>
+          </button>
+        </div>
+      </div>
+      <div class="card-body-custom p-3">
+        <!-- Camera Container with Canvas HUD -->
+        <div class="camera-container position-relative overflow-hidden rounded-3" style="background: #0f172a; min-height: 420px;" id="cameraBox">
+          <video id="webcamVideo" class="camera-video w-100 h-100" playsinline autoplay muted style="object-fit: cover; transform: scaleX(-1);"></video>
+          <img id="uploadedPhotoPreview" class="camera-video w-100 h-100 d-none" style="object-fit: contain; background: #0f172a;" alt="Uploaded Face Preview">
+          
+          <!-- Tracking Canvas for Face Bounding Box & HUD Elements -->
+          <canvas id="trackingCanvas" class="position-absolute top-0 start-0 w-100 h-100" style="pointer-events: none; z-index: 10;"></canvas>
+
+          <!-- Top Overlay HUD -->
+          <div class="camera-overlay p-3 position-absolute top-0 start-0 w-100 d-flex justify-content-between align-items-center" style="z-index: 15; pointer-events: none;">
+            <div class="camera-status-pill" id="camStatusPill">
+              <span class="spinner-grow spinner-grow-sm text-warning" id="camSpinner"></span>
+              <span id="camStatusText">Camera Off</span>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              <div class="camera-status-pill bg-dark bg-opacity-75 text-white" id="liveFpsPill">
+                <i data-lucide="cpu" style="width: 14px;"></i>
+                <span id="fpsText">AI Mood Active</span>
+              </div>
+              <!-- Camera Fit Toggle (Fill / Fit) -->
+              <button type="button" class="btn btn-sm hud-btn-glass rounded-pill px-3 py-1 d-flex align-items-center gap-1 shadow-sm" id="hudFitBtn" style="pointer-events: auto;" title="Toggle Camera Fit: Fill Screen (edge-to-edge) vs Fit Screen (complete frame)">
+                <i data-lucide="scaling" style="width: 14px;"></i>
+                <span class="small fw-semibold" id="hudFitText">Fill</span>
+              </button>
+              <!-- Full Screen Toggle Button -->
+              <button type="button" class="btn btn-sm hud-btn-glass rounded-pill px-3 py-1 d-flex align-items-center gap-1 shadow-sm" id="hudFullscreenBtn" style="pointer-events: auto;" title="Full Screen Camera">
+                <i data-lucide="maximize" id="hudFullscreenIcon" style="width: 14px;"></i>
+                <span class="small fw-semibold" id="hudFullscreenText">Full Screen</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Bottom Live Emotion Banner -->
+          <div class="position-absolute bottom-0 start-0 w-100 p-3" style="z-index: 15; pointer-events: none;">
+            <div class="rounded-3 p-2 px-3 d-flex align-items-center justify-content-between text-white shadow-sm" id="hudEmotionBanner" style="background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.15);">
+              <div class="d-flex align-items-center gap-2">
+                <span class="fs-4" id="hudEmoji">👤</span>
+                <div>
+                  <div class="fw-bold small" id="hudMoodTitle">Awaiting Live Camera...</div>
+                  <div class="text-white-50" style="font-size: 0.75rem;" id="hudFeelingDesc">Start the camera to begin live emotional telemetry</div>
+                </div>
+              </div>
+              <div class="text-end">
+                <span class="badge bg-primary px-2 py-1" id="hudConfidenceBadge">0.0%</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Fullscreen Floating Controls Bar (Active in Fullscreen mode) -->
+          <div id="fullscreenFloatingControls" class="position-absolute end-0 bottom-0 p-3 d-none" style="z-index: 20; pointer-events: auto;">
+            <div class="d-flex align-items-center gap-2 p-2 rounded-pill fs-floating-bar">
+              <button type="button" class="btn btn-primary-custom btn-sm rounded-pill px-3 d-flex align-items-center gap-2 shadow-sm" id="fsSnapshotBtn">
+                <i data-lucide="bookmark-check" style="width: 15px;"></i>
+                <span>Log Check-In</span>
+              </button>
+              <button type="button" class="btn btn-outline-light btn-sm rounded-pill px-3 d-flex align-items-center gap-1 shadow-sm" id="fsExitBtn" title="Exit Full Screen (Esc)">
+                <i data-lucide="minimize" style="width: 15px;"></i>
+                <span>Exit Fullscreen</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Shutter Flash Overlay -->
+          <div id="cameraFlashOverlay" class="position-absolute top-0 start-0 w-100 h-100 bg-white" style="opacity: 0; pointer-events: none; z-index: 25; transition: opacity 0.2s ease-out;"></div>
+
+          <!-- Fallback Permission Banner if browser requires manual gesture or camera unavailable -->
+          <div id="camPermissionBanner" class="position-absolute top-50 start-50 translate-middle text-center text-white d-none p-3 rounded-3" style="z-index: 18; background: rgba(15, 23, 42, 0.88); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.15); max-width: 90%;">
+            <i data-lucide="camera" style="width: 44px; height: 44px; margin-bottom: 10px; opacity: 0.85;"></i>
+            <h6 class="fw-bold mb-1" id="camBannerTitle">Camera Connection</h6>
+            <p class="text-white-50 small mb-3" id="camBannerMsg">Click below to activate camera or upload a face photo to analyze.</p>
+            <div class="d-flex justify-content-center gap-2 flex-wrap">
+              <button type="button" class="btn btn-primary-custom btn-sm px-3" onclick="document.getElementById('startCamBtn').click()">
+                <i data-lucide="video" style="width: 14px;"></i> Try Start Camera
+              </button>
+              <button type="button" class="btn btn-outline-light btn-sm px-3" onclick="document.getElementById('moodPhotoUpload').click()">
+                <i data-lucide="upload" style="width: 14px;"></i> Upload Face Photo
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Camera Action Buttons -->
+        <div class="mt-3 d-flex flex-wrap gap-2 justify-content-between align-items-center">
+          <div class="d-flex flex-wrap align-items-center gap-3">
+            <div class="d-flex gap-2">
+              <button type="button" class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" id="startCamBtn">
+                <i data-lucide="video" style="width: 16px;"></i> Start Camera
+              </button>
+              <button type="button" class="btn btn-outline-danger btn-sm d-flex align-items-center gap-1" id="stopCamBtn" disabled>
+                <i data-lucide="video-off" style="width: 16px;"></i> Stop Camera
+              </button>
+              <button type="button" class="btn btn-outline-primary btn-sm d-flex align-items-center gap-1" id="uploadMoodPhotoBtn">
+                <i data-lucide="upload" style="width: 16px;"></i> Upload Photo
+              </button>
+              <input type="file" id="moodPhotoUpload" accept="image/*" class="d-none">
+            </div>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+              <div class="form-check form-switch d-flex align-items-center gap-2 mb-0">
+                <input class="form-check-input" type="checkbox" role="switch" id="autoCaptureToggle" checked>
+                <label class="form-check-label small fw-semibold text-muted" for="autoCaptureToggle" title="Auto-capture takes a face photo 1 time per person, then scans mood only without duplicate photos.">
+                  1-Time Snapshot Auto-Capture
+                </label>
+              </div>
+              <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 d-inline-flex align-items-center gap-1 rounded-pill" id="resetCapturedMemoryBtn" style="font-size: 0.75rem;" title="Reset memory of snapshotted persons so fresh snapshots can be captured">
+                <i data-lucide="users" style="width: 12px;"></i>
+                <span id="capturedCountBadge"><span id="capturedCountText">0</span> snapshotted</span>
+                <i data-lucide="rotate-ccw" style="width: 11px;" class="ms-1 text-primary"></i>
+              </button>
+            </div>
+          </div>
+          <button type="button" class="btn btn-primary-custom btn-sm d-flex align-items-center gap-2" id="snapshotMoodBtn" disabled>
+            <i data-lucide="bookmark-check" style="width: 16px;"></i>
+            <span>Log Current Mood Check-In</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Column: Live Feeling Telemetry & Breakdown Spectrum -->
+  <div class="col-lg-5">
+    <!-- Active Mood Feeling Card -->
+    <div class="card card-custom mb-4" id="mainMoodCard">
+      <div class="card-body-custom text-center p-4">
+        <!-- Multi-Person Selector Bar (visible when multiple faces are detected) -->
+        <div id="multiPersonPills" class="d-none mb-3 p-2 rounded-2 bg-light-subtle border text-start">
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <span class="badge bg-primary px-2 py-1" id="multiPersonCountBadge">
+              <i data-lucide="users" style="width: 14px;"></i> 2 Persons Tracked
+            </span>
+            <span class="text-muted" style="font-size: 0.75rem;">Click person to view metrics</span>
+          </div>
+          <div class="d-flex flex-wrap justify-content-center gap-1" id="personTabsList"></div>
+        </div>
+
+        <div class="mb-2">
+          <span class="display-3" id="mainMoodEmoji" style="transition: transform 0.3s ease;">😐</span>
+        </div>
+        <h4 class="fw-bold mb-1" id="mainMoodLabel">Neutral & Observing</h4>
+        <p class="text-muted small mb-3" id="mainMoodTag">Balanced emotional baseline</p>
+
+        <div class="row g-2 mb-3 text-center">
+          <div class="col-4">
+            <div class="p-2 rounded bg-light-subtle border">
+              <div class="text-muted" style="font-size: 0.7rem;">CONFIDENCE</div>
+              <div class="fw-bold fs-6" id="metricConfidence">--</div>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="p-2 rounded bg-light-subtle border">
+              <div class="text-muted" style="font-size: 0.7rem;">VALENCE</div>
+              <div class="fw-bold fs-6" id="metricValence">--</div>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="p-2 rounded bg-light-subtle border">
+              <div class="text-muted" style="font-size: 0.7rem;">AROUSAL</div>
+              <div class="fw-bold fs-6" id="metricArousal">--</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI Wellness Tip Alert -->
+        <div class="alert alert-info py-2 px-3 mb-0 text-start small d-flex align-items-start gap-2" id="wellnessTipBox">
+          <i data-lucide="sparkles" class="text-info mt-1 flex-shrink-0" style="width: 16px;"></i>
+          <span id="wellnessTipText">Start camera tracking to receive real-time personalized wellness nudges.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Emotion Spectrum Breakdown Bars -->
+    <div class="card card-custom mb-4">
+      <div class="card-header-custom d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center gap-2">
+          <i data-lucide="bar-chart-2" class="text-primary"></i>
+          <h6 class="mb-0 fw-bold">Live Emotional Spectrum</h6>
+        </div>
+        <span class="text-muted small" style="font-size: 0.75rem;">Real-time Softmax %</span>
+      </div>
+      <div class="card-body-custom p-3">
+        <!-- Happy -->
+        <div class="mb-2">
+          <div class="d-flex justify-content-between small fw-semibold mb-1">
+            <span>😊 Happy / Joyful</span>
+            <span id="pct-happy">0.0%</span>
+          </div>
+          <div class="progress" style="height: 6px;">
+            <div class="progress-bar bg-success" id="bar-happy" role="progressbar" style="width: 0%;"></div>
+          </div>
+        </div>
+
+        <!-- Calm -->
+        <div class="mb-2">
+          <div class="d-flex justify-content-between small fw-semibold mb-1">
+            <span>😌 Calm / Peaceful</span>
+            <span id="pct-calm">0.0%</span>
+          </div>
+          <div class="progress" style="height: 6px;">
+            <div class="progress-bar bg-info" id="bar-calm" role="progressbar" style="width: 0%;"></div>
+          </div>
+        </div>
+
+        <!-- Focused -->
+        <div class="mb-2">
+          <div class="d-flex justify-content-between small fw-semibold mb-1">
+            <span>🧐 Focused / Engaged</span>
+            <span id="pct-focused">0.0%</span>
+          </div>
+          <div class="progress" style="height: 6px;">
+            <div class="progress-bar bg-primary" id="bar-focused" role="progressbar" style="width: 0%;"></div>
+          </div>
+        </div>
+
+        <!-- Neutral -->
+        <div class="mb-2">
+          <div class="d-flex justify-content-between small fw-semibold mb-1">
+            <span>😐 Neutral / Balanced</span>
+            <span id="pct-neutral">0.0%</span>
+          </div>
+          <div class="progress" style="height: 6px;">
+            <div class="progress-bar bg-secondary" id="bar-neutral" role="progressbar" style="width: 0%;"></div>
+          </div>
+        </div>
+
+        <!-- Surprised -->
+        <div class="mb-2">
+          <div class="d-flex justify-content-between small fw-semibold mb-1">
+            <span>😲 Surprised / Alert</span>
+            <span id="pct-surprised">0.0%</span>
+          </div>
+          <div class="progress" style="height: 6px;">
+            <div class="progress-bar bg-warning" id="bar-surprised" role="progressbar" style="width: 0%;"></div>
+          </div>
+        </div>
+
+        <!-- Fatigued -->
+        <div class="mb-2">
+          <div class="d-flex justify-content-between small fw-semibold mb-1">
+            <span>🥱 Tired / Drowsy</span>
+            <span id="pct-fatigued">0.0%</span>
+          </div>
+          <div class="progress" style="height: 6px;">
+            <div class="progress-bar" id="bar-fatigued" role="progressbar" style="width: 0%; background-color: #8b5cf6;"></div>
+          </div>
+        </div>
+
+        <!-- Stressed -->
+        <div class="mb-0">
+          <div class="d-flex justify-content-between small fw-semibold mb-1">
+            <span>😣 Stressed / Tense</span>
+            <span id="pct-stressed">0.0%</span>
+          </div>
+          <div class="progress" style="height: 6px;">
+            <div class="progress-bar bg-danger" id="bar-stressed" role="progressbar" style="width: 0%;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Bottom Section: Recent Mood History & Reflection Timeline -->
+<div class="row g-4 mt-1">
+  <div class="col-12">
+    <div class="card card-custom">
+      <div class="card-header-custom d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center gap-2">
+          <i data-lucide="history" class="text-primary"></i>
+          <h6 class="mb-0 fw-bold">Recent Mood Check-Ins & Wellness Log</h6>
+        </div>
+        <a href="{{ url_for('mood.analytics') }}" class="btn btn-outline-primary btn-sm d-flex align-items-center gap-1">
+          <i data-lucide="trending-up" style="width: 14px;"></i> View Mood Analytics
+        </a>
+      </div>
+      <div class="card-body-custom p-0">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light small">
+              <tr>
+                <th class="ps-4">Timestamp</th>
+                <th>Snapshot</th>
+                <th>Feeling State</th>
+                <th>Confidence</th>
+                <th>Valence</th>
+                <th>Arousal</th>
+                <th>Context</th>
+                <th>Personal Note</th>
+              </tr>
+            </thead>
+            <tbody id="recentMoodTableBody">
+              {% for log in recent_logs %}
+              <tr>
+                <td class="ps-4 text-muted small">{{ log.timestamp.strftime('%b %d, %Y %I:%M %p') }}</td>
+                <td>
+                  {% if log.captured_image %}
+                    <img src="{{ log.captured_image }}" class="rounded-2 border cursor-pointer mood-photo-thumb shadow-sm" style="width: 48px; height: 36px; object-fit: cover; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1.0)'" onclick="showImageModal('{{ log.captured_image }}', '{{ log.feeling_tag or log.dominant_mood }}', '{{ log.timestamp.strftime('%b %d, %Y %I:%M %p') }}')" alt="Camera snapshot" title="Click to view full captured camera snapshot">
+                  {% else %}
+                    <div class="rounded-2 bg-light border d-inline-flex align-items-center justify-content-center text-muted" style="width: 48px; height: 36px; font-size: 1rem;" title="No photo recorded">
+                      {{ log.emoji }}
+                    </div>
+                  {% endif %}
+                </td>
+                <td>
+                  <span class="d-inline-flex align-items-center gap-2 fw-semibold">
+                    <span>{{ log.emoji }}</span>
+                    <span>{{ log.feeling_tag }}</span>
+                  </span>
+                </td>
+                <td><span class="badge bg-light text-dark border">{{ log.confidence }}%</span></td>
+                <td>
+                  <span class="font-monospace small {% if log.valence > 0 %}text-success{% elif log.valence < 0 %}text-danger{% else %}text-muted{% endif %}">
+                    {{ "%+.2f"|format(log.valence) }}
+                  </span>
+                </td>
+                <td><span class="font-monospace small">{{ "%.2f"|format(log.arousal) }}</span></td>
+                <td><span class="badge bg-secondary-subtle text-secondary">{{ log.context }}</span></td>
+                <td class="text-muted small">{{ log.note or '—' }}</td>
+              </tr>
+              {% else %}
+              <tr id="noLogsRow">
+                <td colspan="8" class="text-center py-4 text-muted small">
+                  No mood check-ins logged yet. Start tracking and click <strong>Log Current Mood Check-In</strong> to record snapshots.
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Log Mood Snapshot Reflection Note -->
+<div class="modal fade" id="logMoodModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content card-custom">
+      <div class="modal-header border-bottom">
+        <div class="d-flex align-items-center gap-2">
+          <span class="fs-4" id="modalEmoji">😊</span>
+          <h6 class="modal-title fw-bold" id="modalTitle">Record Mood Check-In</h6>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-4">
+        <!-- Captured Camera Snapshot Preview -->
+        <div id="modalPhotoContainer" class="text-center mb-3 d-none">
+          <div class="position-relative d-inline-block w-100">
+            <img id="modalCapturedPhoto" src="" class="rounded-3 border shadow-sm w-100" style="max-height: 220px; object-fit: contain; background: #0f172a;" alt="Captured Camera Snapshot Preview">
+            <span class="badge bg-dark bg-opacity-75 position-absolute bottom-0 start-50 translate-middle-x mb-2 px-2 py-1 text-white small" style="font-size: 0.75rem;">
+              <i data-lucide="camera" style="width: 12px;"></i> Full Camera Snapshot
+            </span>
+          </div>
+        </div>
+
+        <div class="text-center mb-3">
+          <div class="badge bg-primary-subtle text-primary px-3 py-2 fs-6 mb-1" id="modalFeelingTag">
+            Radiant & Cheerful
+          </div>
+          <div class="text-muted small" id="modalMetricsSummary">Confidence: 92% | Valence: +0.82</div>
+        </div>
+        <div class="mb-3">
+          <label for="moodNoteInput" class="form-label small fw-semibold">Optional Reflection or Note</label>
+          <textarea id="moodNoteInput" class="form-control" rows="3" placeholder="What are you working on or feeling right now? (e.g. Just wrapped a productive sprint, sipping coffee)"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer border-top">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary-custom btn-sm" id="confirmSaveMoodBtn">
+          <i data-lucide="check" style="width: 16px;"></i> Save Check-In
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: View Full Captured Photo -->
+<div class="modal fade" id="viewPhotoModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content card-custom">
+      <div class="modal-header border-bottom py-2">
+        <h6 class="modal-title fw-semibold d-flex align-items-center gap-2" id="viewPhotoModalTitle">
+          <i data-lucide="image" style="width: 16px;"></i> Captured Camera Snapshot
+        </h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-center p-3">
+        <img id="fullSizeCapturedPhoto" src="" class="img-fluid rounded-3 border shadow-sm w-100" style="max-height: 520px; object-fit: contain; background: #0f172a;" alt="Captured Camera Snapshot">
+        <div class="mt-2 text-muted small" id="viewPhotoModalSub"></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/webcam.js') }}"></script>
+<script>
+  let webcam = null;
+  let isTracking = false;
+  let lastAnalysis = null;
+  let lastCapturedFrame = null;
+  let analysisInterval = null;
+  let isAnalyzingFrame = false;
+  let animFrameId = null;
+  let trackedFaces = {}; // ID -> { current, target, opacity, targetOpacity, color, tagText, lastSeen }
+  let stableFaceFrames = 0;
+  let lastAutoCaptureTime = 0;
+  const AUTO_CAPTURE_COOLDOWN = 15000; // 15s between auto-captures
+
+  const cameraBox = document.getElementById("cameraBox");
+  const startBtn = document.getElementById("startCamBtn");
+  const stopBtn = document.getElementById("stopCamBtn");
+  const snapBtn = document.getElementById("snapshotMoodBtn");
+  const videoEl = document.getElementById("webcamVideo");
+  const photoPreview = document.getElementById("uploadedPhotoPreview");
+  const photoInput = document.getElementById("moodPhotoUpload");
+  const uploadBtn = document.getElementById("uploadMoodPhotoBtn");
+  const canvasEl = document.getElementById("trackingCanvas");
+  const ctx = canvasEl.getContext("2d");
+
+  const camSpinner = document.getElementById("camSpinner");
+  const camStatusText = document.getElementById("camStatusText");
+  const trackingBadge = document.getElementById("trackingStatusBadge");
+  const permissionBanner = document.getElementById("camPermissionBanner");
+
+  // HUD Elements
+  const hudEmoji = document.getElementById("hudEmoji");
+  const hudMoodTitle = document.getElementById("hudMoodTitle");
+  const hudFeelingDesc = document.getElementById("hudFeelingDesc");
+  const hudConfidenceBadge = document.getElementById("hudConfidenceBadge");
+
+  // Main Card
+  const mainEmoji = document.getElementById("mainMoodEmoji");
+  const mainLabel = document.getElementById("mainMoodLabel");
+  const mainTag = document.getElementById("mainMoodTag");
+  const metricConf = document.getElementById("metricConfidence");
+  const metricVal = document.getElementById("metricValence");
+  const metricAro = document.getElementById("metricArousal");
+  const wellnessTip = document.getElementById("wellnessTipText");
+
+  // Spectrum Bars
+  const emotionKeys = ["happy", "calm", "focused", "neutral", "surprised", "fatigued", "stressed"];
+
+  document.addEventListener("DOMContentLoaded", () => {
+    webcam = new WebcamController({
+      onStatusChange: (s) => {
+        camStatusText.innerText = s.message;
+        if (s.status === "streaming") {
+          camSpinner.className = "spinner-grow spinner-grow-sm text-success";
+          startBtn.disabled = true;
+          stopBtn.disabled = false;
+          snapBtn.disabled = false;
+          if (permissionBanner) permissionBanner.classList.add("d-none");
+          trackingBadge.className = "badge bg-success text-white px-2 py-1";
+          trackingBadge.innerHTML = '<i data-lucide="radio" style="width:14px;"></i> Live Tracking';
+          startMoodTrackingLoop();
+        } else {
+          camSpinner.className = "spinner-grow spinner-grow-sm text-danger";
+          startBtn.disabled = false;
+          stopBtn.disabled = true;
+          snapBtn.disabled = true;
+          trackingBadge.className = "badge bg-secondary-subtle text-secondary px-2 py-1";
+          trackingBadge.innerHTML = '<i data-lucide="activity" style="width:14px;"></i> Standby';
+          stopMoodTrackingLoop();
+        }
+        if (window.lucide) lucide.createIcons();
+      }
+    });
+
+    startBtn.addEventListener("click", async () => {
+      try {
+        if (photoPreview) photoPreview.classList.add("d-none");
+        videoEl.classList.remove("d-none");
+        if (permissionBanner) permissionBanner.classList.add("d-none");
+        await webcam.start("webcamVideo");
+      } catch (err) {
+        showCameraErrorBanner(err.message);
+      }
+    });
+
+    stopBtn.addEventListener("click", () => {
+      webcam.stop();
+      ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+    });
+
+    if (uploadBtn && photoInput) {
+      uploadBtn.addEventListener("click", () => {
+        photoInput.click();
+      });
+
+      photoInput.addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (ev) => {
+          const base64Data = ev.target.result;
+          lastCapturedFrame = base64Data;
+          if (webcam && webcam.stream) webcam.stop();
+          stopMoodTrackingLoop();
+
+          videoEl.classList.add("d-none");
+          photoPreview.src = base64Data;
+          photoPreview.classList.remove("d-none");
+          if (permissionBanner) permissionBanner.classList.add("d-none");
+
+          camStatusText.innerText = "Analyzing Face Photo...";
+          camSpinner.className = "spinner-grow spinner-grow-sm text-info";
+          trackingBadge.className = "badge bg-primary text-white px-2 py-1";
+          trackingBadge.innerHTML = '<i data-lucide="image" style="width:14px;"></i> Photo Mode';
+          startBtn.disabled = false;
+          stopBtn.disabled = true;
+
+          try {
+            const res = await fetch("/mood/api/analyze", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ image: base64Data })
+            });
+            const json = await res.json();
+            if (res.ok && json.success && json.data) {
+              lastAnalysis = json.data;
+              updateMoodUI(json.data);
+              updateTrackingTargets(json.data);
+              if (animFrameId) cancelAnimationFrame(animFrameId);
+              animFrameId = requestAnimationFrame(renderHUDLoop);
+              snapBtn.disabled = !json.data.face_detected;
+              camStatusText.innerText = json.data.face_detected ? `Analyzed: ${json.data.feeling_tag}` : "No face detected in photo";
+              camSpinner.className = json.data.face_detected ? "spinner-grow spinner-grow-sm text-success" : "spinner-grow spinner-grow-sm text-warning";
+              
+              if (document.getElementById("autoCaptureToggle")?.checked && json.data.face_detected) {
+                await performAutoCapture(json.data);
+              }
+            } else {
+              camStatusText.innerText = json.error || "Analysis failed";
+            }
+          } catch (err) {
+            camStatusText.innerText = "Analysis error: " + err.message;
+          }
+          if (window.lucide) lucide.createIcons();
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    snapBtn.addEventListener("click", () => {
+      if (!lastAnalysis || !lastAnalysis.face_detected) {
+        alert("No face currently tracked. Please center your face in the camera view.");
+        return;
+      }
+      openSnapshotModal();
+    });
+
+    document.getElementById("confirmSaveMoodBtn").addEventListener("click", async () => {
+      await saveMoodCheckin();
+    });
+
+    // Fullscreen and Camera Fit Buttons
+    const headerFsBtn = document.getElementById("headerFsBtn");
+    const hudFullscreenBtn = document.getElementById("hudFullscreenBtn");
+    const hudFitBtn = document.getElementById("hudFitBtn");
+    const fsSnapshotBtn = document.getElementById("fsSnapshotBtn");
+    const fsExitBtn = document.getElementById("fsExitBtn");
+
+    if (headerFsBtn) headerFsBtn.addEventListener("click", toggleFullscreen);
+    if (hudFullscreenBtn) hudFullscreenBtn.addEventListener("click", toggleFullscreen);
+    if (hudFitBtn) hudFitBtn.addEventListener("click", toggleCameraFit);
+    if (fsExitBtn) fsExitBtn.addEventListener("click", exitFullscreen);
+    if (fsSnapshotBtn) {
+      fsSnapshotBtn.addEventListener("click", () => {
+        if (!lastAnalysis || !lastAnalysis.face_detected) {
+          alert("No face currently tracked in camera view. Please look at the camera.");
+          return;
+        }
+        openSnapshotModal();
+      });
+    }
+
+    // Double-click camera container to toggle fullscreen
+    if (cameraBox) {
+      cameraBox.addEventListener("dblclick", (e) => {
+        if (e.target.closest("button") || e.target.closest("input") || e.target.closest("textarea")) return;
+        toggleFullscreen();
+      });
+    }
+
+    // Keyboard Shortcuts: Press 'F' for fullscreen, 'Esc' to exit
+    document.addEventListener("keydown", (e) => {
+      const activeTag = document.activeElement ? document.activeElement.tagName : "";
+      if (['INPUT', 'TEXTAREA'].includes(activeTag)) return;
+
+      if (e.key === "f" || e.key === "F") {
+        e.preventDefault();
+        toggleFullscreen();
+      } else if (e.key === "Escape" && isFullscreen) {
+        exitFullscreen();
+      }
+    });
+
+    document.addEventListener("fullscreenchange", () => {
+      const isNativeFs = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+      onFullscreenChanged(isNativeFs);
+    });
+    document.addEventListener("webkitfullscreenchange", () => {
+      const isNativeFs = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+      onFullscreenChanged(isNativeFs);
+    });
+
+    // Reset snapshotted memory button
+    const resetMemBtn = document.getElementById("resetCapturedMemoryBtn");
+    if (resetMemBtn) {
+      resetMemBtn.addEventListener("click", resetCapturedPersonsMemory);
+    }
+    updateCapturedPersonsCount();
+
+    // Auto-open live camera immediately on page load without requiring user to click start
+    autoStartCamera();
+  });
+
+  let isFullscreen = false;
+  let cameraFitMode = "cover"; // "cover" (Fill screen) or "contain" (Fit frame)
+
+  function toggleFullscreen() {
+    if (!isFullscreen) {
+      enterFullscreen();
+    } else {
+      exitFullscreen();
+    }
+  }
+
+  function enterFullscreen() {
+    if (!cameraBox) return;
+    if (cameraBox.requestFullscreen) {
+      cameraBox.requestFullscreen().catch(() => {
+        cameraBox.classList.add("camera-box-fullscreen");
+        onFullscreenChanged(true);
+      });
+    } else if (cameraBox.webkitRequestFullscreen) {
+      cameraBox.webkitRequestFullscreen();
+    } else {
+      cameraBox.classList.add("camera-box-fullscreen");
+      onFullscreenChanged(true);
+    }
+  }
+
+  function exitFullscreen() {
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
+      }
+    }
+    if (cameraBox) cameraBox.classList.remove("camera-box-fullscreen");
+    onFullscreenChanged(false);
+  }
+
+  function onFullscreenChanged(active) {
+    isFullscreen = active;
+    const fsIcon = document.getElementById("hudFullscreenIcon");
+    const fsText = document.getElementById("hudFullscreenText");
+    const headerFsIcon = document.getElementById("headerFsIcon");
+    const fsControls = document.getElementById("fullscreenFloatingControls");
+
+    if (active) {
+      if (cameraBox) cameraBox.classList.add("camera-box-fullscreen");
+      if (fsIcon) fsIcon.setAttribute("data-lucide", "minimize");
+      if (fsText) fsText.innerText = "Exit Full";
+      if (headerFsIcon) headerFsIcon.setAttribute("data-lucide", "minimize-2");
+      if (fsControls) fsControls.classList.remove("d-none");
+    } else {
+      if (cameraBox) cameraBox.classList.remove("camera-box-fullscreen");
+      if (fsIcon) fsIcon.setAttribute("data-lucide", "maximize");
+      if (fsText) fsText.innerText = "Full Screen";
+      if (headerFsIcon) headerFsIcon.setAttribute("data-lucide", "maximize-2");
+      if (fsControls) fsControls.classList.add("d-none");
+    }
+
+    if (window.lucide) lucide.createIcons();
+
+    // Trigger canvas resize so the face tracking box dynamically re-projects to full screen
+    setTimeout(() => {
+      resizeCanvas();
+    }, 60);
+  }
+
+  function toggleCameraFit() {
+    cameraFitMode = (cameraFitMode === "cover") ? "contain" : "cover";
+    applyCameraFit();
+  }
+
+  function applyCameraFit() {
+    const video = document.getElementById("webcamVideo");
+    const photo = document.getElementById("uploadedPhotoPreview");
+    const fitText = document.getElementById("hudFitText");
+
+    if (video) {
+      video.style.objectFit = cameraFitMode;
+    }
+    if (photo) {
+      photo.style.objectFit = cameraFitMode;
+    }
+    if (fitText) {
+      fitText.innerText = (cameraFitMode === "cover") ? "Fill" : "Fit";
+    }
+    resizeCanvas();
+  }
+
+  async function autoStartCamera() {
+    try {
+      if (photoPreview) photoPreview.classList.add("d-none");
+      videoEl.classList.remove("d-none");
+      camStatusText.innerText = "Opening camera...";
+      camSpinner.className = "spinner-grow spinner-grow-sm text-info";
+      await webcam.start("webcamVideo");
+    } catch (err) {
+      console.warn("Auto-start camera notice:", err);
+      showCameraErrorBanner(err.message);
+    }
+  }
+
+  function showCameraErrorBanner(msg) {
+    camStatusText.innerText = msg || "Camera unavailable";
+    camSpinner.className = "spinner-grow spinner-grow-sm text-warning";
+    if (permissionBanner) {
+      const bannerMsg = document.getElementById("camBannerMsg");
+      if (bannerMsg) bannerMsg.innerText = msg || "Click below to activate camera or upload a face photo to analyze.";
+      permissionBanner.classList.remove("d-none");
+      if (window.lucide) lucide.createIcons();
+    }
+  }
+
+  window.addEventListener("beforeunload", () => {
+    if (webcam) webcam.stop();
+  });
+
+  window.addEventListener("resize", () => {
+    resizeCanvas();
+  });
+
+  function startMoodTrackingLoop() {
+    isTracking = true;
+    if (analysisInterval) clearInterval(analysisInterval);
+    if (animFrameId) cancelAnimationFrame(animFrameId);
+
+    // Start 60 FPS silky-smooth HUD LERP render loop
+    animFrameId = requestAnimationFrame(renderHUDLoop);
+
+    // Fast, responsive 380ms detection polling loop
+    analysisInterval = setInterval(async () => {
+      if (!isTracking || !webcam || !webcam.stream || videoEl.paused) return;
+      await processMoodFrame();
+    }, 380);
+  }
+
+  function stopMoodTrackingLoop() {
+    isTracking = false;
+    if (analysisInterval) {
+      clearInterval(analysisInterval);
+      analysisInterval = null;
+    }
+    if (animFrameId) {
+      cancelAnimationFrame(animFrameId);
+      animFrameId = null;
+    }
+    trackedFaces = {};
+    if (ctx && canvasEl) {
+      ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+    }
+  }
+
+  async function processMoodFrame() {
+    if (isAnalyzingFrame || !isTracking || !webcam || !webcam.stream || videoEl.paused) return;
+    isAnalyzingFrame = true;
+
+    try {
+      // 0.72 quality provides lightweight (~15KB) payload for fast low-latency transfer
+      const frameData = webcam.captureBase64(0.72);
+      lastCapturedFrame = frameData;
+
+      const res = await fetch("/mood/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: frameData })
+      });
+
+      if (!res.ok) {
+        isAnalyzingFrame = false;
+        return;
+      }
+
+      const json = await res.json();
+      if (!json.success || !json.data) {
+        isAnalyzingFrame = false;
+        return;
+      }
+
+      lastAnalysis = json.data;
+      updateMoodUI(json.data);
+      updateTrackingTargets(json.data);
+
+      // Auto-capture check-in on stable face detection:
+      // Verifies face biometrics: takes snapshot ONLY for NEW persons.
+      // If verified as the SAME person, does NOT take a shot!
+      const autoCaptureToggle = document.getElementById("autoCaptureToggle");
+      if (autoCaptureToggle && autoCaptureToggle.checked && json.data.face_detected && json.data.confidence >= 65) {
+        const hasNew = Boolean(json.data.has_new_person || json.data.needs_snapshot);
+        if (hasNew) {
+          stableFaceFrames++;
+          const now = Date.now();
+          if (stableFaceFrames >= 2 && (now - lastAutoCaptureTime > 3500)) {
+            lastAutoCaptureTime = now;
+            await performAutoCapture(json.data);
+          }
+        } else {
+          stableFaceFrames = 0;
+        }
+      } else if (!json.data.face_detected) {
+        stableFaceFrames = 0;
+      }
+    } catch (err) {
+      console.warn("Mood telemetry loop error:", err);
+    } finally {
+      isAnalyzingFrame = false;
+    }
+  }
+
+  function triggerShutterFlash() {
+    const flash = document.getElementById("cameraFlashOverlay");
+    if (flash) {
+      flash.style.opacity = "0.75";
+      setTimeout(() => { flash.style.opacity = "0"; }, 200);
+    }
+  }
+
+  async function updateCapturedPersonsCount(count) {
+    const countEl = document.getElementById("capturedCountText");
+    if (!countEl) return;
+    if (typeof count === "number") {
+      countEl.innerText = count;
+      return;
+    }
+    try {
+      const res = await fetch("/mood/api/captured-stats");
+      const json = await res.json();
+      if (res.ok && json.success) {
+        countEl.innerText = json.captured_count;
+      }
+    } catch (e) {
+      console.warn("Could not fetch captured count:", e);
+    }
+  }
+
+  async function resetCapturedPersonsMemory() {
+    if (!confirm("Reset memory of snapshotted persons? Auto-capture will take fresh snapshots for all faces.")) return;
+    try {
+      const res = await fetch("/mood/api/reset-captured", { method: "POST" });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        await updateCapturedPersonsCount(0);
+        if (typeof showToast === "function") {
+          showToast("Snapshot memory reset. Auto-capture will take fresh snapshots for detected faces.", "success");
+        }
+      }
+    } catch (e) {
+      alert("Error resetting snapshot memory: " + e.message);
+    }
+  }
+
+  async function performAutoCapture(data) {
+    if (!data || !data.face_detected) return;
+
+    const faces = (data.faces && data.faces.length > 0) ? data.faces : [data];
+    const newFaces = faces.filter(f => f.needs_snapshot);
+
+    // If verified as the SAME person, do NOT take a shot!
+    if (newFaces.length === 0) return;
+
+    // Genuinely NEW person detected: take 1-time full camera snapshot and register face
+    triggerShutterFlash();
+
+    for (const newFace of newFaces) {
+      try {
+        const res = await fetch("/mood/api/log", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mood_data: newFace,
+            image: lastCapturedFrame,
+            face_box: newFace.face_box,
+            note: `Auto-capture snapshot for new person (${newFace.person_name || 'Person ' + (newFace.person_id || 1)})`,
+            context: "camera_auto_capture"
+          })
+        });
+
+        const resJson = await res.json();
+        if (res.ok && resJson.success) {
+          prependMoodTableRow(resJson.log);
+          if (typeof showToast === "function") {
+            showToast(`📸 New Person Verified: Captured 1-time snapshot for ${newFace.person_name || 'Person ' + (newFace.person_id || 1)} (${newFace.label})!`, "success");
+          }
+          await updateCapturedPersonsCount();
+        }
+      } catch (err) {
+        console.warn("Auto-capture new face error:", err);
+      }
+    }
+  }
+
+  let selectedPersonId = 1;
+
+  function updateMoodUI(data) {
+    if (!data.face_detected) {
+      hudEmoji.innerText = "👤";
+      hudMoodTitle.innerText = "Awaiting Face...";
+      hudFeelingDesc.innerText = data.message || "Please look directly at the camera.";
+      hudConfidenceBadge.className = "badge bg-secondary";
+      hudConfidenceBadge.innerText = "0.0%";
+      const multiPills = document.getElementById("multiPersonPills");
+      if (multiPills) multiPills.classList.add("d-none");
+      const fpsText = document.getElementById("fpsText");
+      if (fpsText) fpsText.innerText = "AI Mood Active";
+      return;
+    }
+
+    const faceCount = data.face_count || (data.faces ? data.faces.length : 1);
+    const faces = data.faces && data.faces.length > 0 ? data.faces : [data];
+
+    // Status Pill
+    const fpsText = document.getElementById("fpsText");
+    if (fpsText) {
+      fpsText.innerHTML = faceCount > 1 
+        ? `<i data-lucide="users" style="width:14px;"></i> ${faceCount} Faces Active`
+        : `<i data-lucide="cpu" style="width:14px;"></i> 1 Face Active`;
+    }
+
+    // Top HUD Banner
+    if (faceCount > 1) {
+      hudEmoji.innerText = "👥";
+      hudMoodTitle.innerText = `Multi-Person Mood (${faceCount} Faces Tracked)`;
+      hudFeelingDesc.innerText = data.group_summary || "Simultaneous group affect telemetry";
+      hudConfidenceBadge.className = "badge bg-primary";
+      hudConfidenceBadge.innerText = `${faceCount} People`;
+    } else {
+      hudEmoji.innerText = data.emoji;
+      hudMoodTitle.innerText = `${data.label} (${data.feeling_tag})`;
+      hudFeelingDesc.innerText = data.wellness_tip;
+      hudConfidenceBadge.className = "badge bg-success";
+      hudConfidenceBadge.innerText = `${data.confidence}% Match`;
+    }
+
+    // Multi-Person Selector Bar
+    const multiPills = document.getElementById("multiPersonPills");
+    const personTabsList = document.getElementById("personTabsList");
+    const countBadge = document.getElementById("multiPersonCountBadge");
+
+    if (faceCount > 1 && multiPills && personTabsList) {
+      multiPills.classList.remove("d-none");
+      countBadge.innerHTML = `<i data-lucide="users" style="width: 14px;"></i> ${faceCount} Persons Tracked`;
+
+      personTabsList.innerHTML = "";
+      faces.forEach((f, idx) => {
+        const pid = f.person_id || (idx + 1);
+        const btn = document.createElement("button");
+        btn.type = "button";
+        const isSelected = (selectedPersonId === pid) || (selectedPersonId > faces.length && idx === 0);
+        btn.className = `btn btn-sm ${isSelected ? 'btn-primary' : 'btn-outline-secondary'} py-1 px-2 d-flex align-items-center gap-1`;
+        btn.style.fontSize = "0.75rem";
+        btn.innerHTML = `<span>${f.emoji}</span> <strong>P${pid}</strong> <span class="badge ${isSelected ? 'bg-white text-primary' : 'bg-secondary-subtle text-secondary'}">${f.label.split('/')[0].trim()}</span>`;
+        btn.onclick = () => {
+          selectedPersonId = pid;
+          updateSelectedPersonCard(f);
+          updateMoodUI(data);
+        };
+        personTabsList.appendChild(btn);
+      });
+    } else if (multiPills) {
+      multiPills.classList.add("d-none");
+    }
+
+    // Determine person to show in detail card
+    let activePerson = faces.find(f => f.person_id === selectedPersonId) || faces[0] || data;
+    updateSelectedPersonCard(activePerson);
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function updateSelectedPersonCard(p) {
+    mainEmoji.innerText = p.emoji;
+    mainEmoji.style.transform = "scale(1.15)";
+    setTimeout(() => { mainEmoji.style.transform = "scale(1.0)"; }, 200);
+
+    const prefix = p.person_id ? `Person ${p.person_id}: ` : "";
+    mainLabel.innerText = `${prefix}${p.label}`;
+    mainTag.innerText = p.feeling_tag;
+    metricConf.innerText = `${p.confidence}%`;
+    metricVal.innerText = (p.valence >= 0 ? "+" : "") + Number(p.valence).toFixed(2);
+    metricVal.className = "fw-bold fs-6 " + (p.valence > 0 ? "text-success" : p.valence < 0 ? "text-danger" : "text-muted");
+    metricAro.innerText = `${Math.round(p.arousal * 100)}%`;
+    wellnessTip.innerText = p.wellness_tip;
+
+    // Spectrum Bars
+    if (p.breakdown) {
+      emotionKeys.forEach((k) => {
+        const val = p.breakdown[k] || 0.0;
+        const pctEl = document.getElementById(`pct-${k}`);
+        const barEl = document.getElementById(`bar-${k}`);
+        if (pctEl) pctEl.innerText = `${val.toFixed(1)}%`;
+        if (barEl) barEl.style.width = `${val}%`;
+      });
+    }
+  }
+
+  function resizeCanvas() {
+    if (!cameraBox || !canvasEl) return;
+    const rect = cameraBox.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const targetW = Math.round(rect.width * dpr);
+    const targetH = Math.round(rect.height * dpr);
+    if (canvasEl.width !== targetW || canvasEl.height !== targetH) {
+      canvasEl.width = targetW;
+      canvasEl.height = targetH;
+    }
+  }
+
+  function updateTrackingTargets(data) {
+    if (!cameraBox) return;
+    const rect = cameraBox.getBoundingClientRect();
+    const cw = rect.width;
+    const ch = rect.height;
+
+    if (!data || !data.face_detected) {
+      // Gracefully fade out all tracked faces
+      for (const id in trackedFaces) {
+        trackedFaces[id].targetOpacity = 0.0;
+      }
+      return;
+    }
+
+    const faces = data.faces && data.faces.length > 0 ? data.faces : (data.face_box ? [{
+      person_id: 1,
+      face_box: data.face_box,
+      color: data.color || "#10b981",
+      emoji: data.emoji || "😊",
+      label: data.label || "Mood",
+      feeling_tag: data.feeling_tag,
+      confidence: data.confidence
+    }] : []);
+
+    const isVideo = !photoPreview || photoPreview.classList.contains("d-none");
+    const activeIds = new Set();
+
+    faces.forEach((f, idx) => {
+      const b = f.face_box;
+      if (!b) return;
+
+      const id = String(f.person_id || (idx + 1));
+      activeIds.add(id);
+
+      let targetX, targetY, targetW, targetH;
+
+      if (isVideo) {
+        const vw = videoEl.videoWidth || 640;
+        const vh = videoEl.videoHeight || 480;
+        const fitMode = videoEl.style.objectFit || cameraFitMode || "cover";
+        const scale = (fitMode === "cover") ? Math.max(cw / vw, ch / vh) : Math.min(cw / vw, ch / vh);
+        const renderedW = vw * scale;
+        const renderedH = vh * scale;
+        const offsetX = (cw - renderedW) / 2;
+        const offsetY = (ch - renderedH) / 2;
+
+        // Frame captured by webcam.captureBase64 is already mirrored to match the on-screen video view
+        targetX = offsetX + (b.x * scale);
+        targetY = offsetY + (b.y * scale);
+        targetW = b.w * scale;
+        targetH = b.h * scale;
+      } else {
+        // Photo upload mode
+        const nw = photoPreview.naturalWidth || 640;
+        const nh = photoPreview.naturalHeight || 480;
+        const fitMode = photoPreview.style.objectFit || "contain";
+        const scale = (fitMode === "cover") ? Math.max(cw / nw, ch / nh) : Math.min(cw / nw, ch / nh);
+        const renderedW = nw * scale;
+        const renderedH = nh * scale;
+        const offsetX = (cw - renderedW) / 2;
+        const offsetY = (ch - renderedH) / 2;
+
+        targetX = offsetX + (b.x * scale);
+        targetY = offsetY + (b.y * scale);
+        targetW = b.w * scale;
+        targetH = b.h * scale;
+      }
+
+      // Add gentle bounding margin around face for polished framing
+      const padX = targetW * 0.05;
+      const padY = targetH * 0.06;
+      targetX = targetX - padX;
+      targetY = targetY - padY;
+      targetW = targetW + padX * 2;
+      targetH = targetH + padY * 2;
+
+      const isNew = f.needs_snapshot !== false;
+      const snapBadge = isNew ? "📸 New Person" : "✓ Verified (Same Person)";
+      const color = f.color || (isNew ? "#10b981" : "#06b6d4");
+      const personLabel = f.person_name || (faces.length > 1 ? `Person ${id}` : "");
+      const personPrefix = personLabel ? `${personLabel} • ` : "";
+      const labelText = (f.label || "Mood").split('/')[0].trim();
+      const tagText = `${personPrefix}${f.emoji || '😊'} ${labelText} • ${snapBadge}`;
+
+      if (!trackedFaces[id]) {
+        trackedFaces[id] = {
+          id: id,
+          current: { x: targetX, y: targetY, w: targetW, h: targetH },
+          target: { x: targetX, y: targetY, w: targetW, h: targetH },
+          opacity: 0.0,
+          targetOpacity: 1.0,
+          color: color,
+          tagText: tagText,
+          isNewPerson: isNew,
+          lastSeen: Date.now()
+        };
+      } else {
+        const tf = trackedFaces[id];
+        tf.target.x = targetX;
+        tf.target.y = targetY;
+        tf.target.w = targetW;
+        tf.target.h = targetH;
+        tf.targetOpacity = 1.0;
+        tf.color = color;
+        tf.tagText = tagText;
+        tf.isNewPerson = isNew;
+        tf.lastSeen = Date.now();
+      }
+    });
+
+    for (const id in trackedFaces) {
+      if (!activeIds.has(id)) {
+        trackedFaces[id].targetOpacity = 0.0;
+      }
+    }
+  }
+
+  function renderHUDLoop() {
+    resizeCanvas();
+
+    const dpr = window.devicePixelRatio || 1;
+    const cw = cameraBox ? cameraBox.clientWidth : 640;
+    const ch = cameraBox ? cameraBox.clientHeight : 480;
+
+    ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+    ctx.save();
+    ctx.scale(dpr, dpr);
+
+    const LERP_FACTOR = 0.28; // Responsive, smooth spring interpolation
+    const OPACITY_LERP = 0.16; // Soft fade transition
+    const now = Date.now();
+    let hasVisibleFaces = false;
+
+    for (const id in trackedFaces) {
+      const tf = trackedFaces[id];
+
+      // If detection hasn't updated for > 850ms, begin smooth fade-out
+      if (now - tf.lastSeen > 850) {
+        tf.targetOpacity = 0.0;
+      }
+
+      // Smooth position interpolation
+      tf.current.x += (tf.target.x - tf.current.x) * LERP_FACTOR;
+      tf.current.y += (tf.target.y - tf.current.y) * LERP_FACTOR;
+      tf.current.w += (tf.target.w - tf.current.w) * LERP_FACTOR;
+      tf.current.h += (tf.target.h - tf.current.h) * LERP_FACTOR;
+      tf.opacity += (tf.targetOpacity - tf.opacity) * OPACITY_LERP;
+
+      if (tf.opacity < 0.01 && tf.targetOpacity === 0.0) {
+        delete trackedFaces[id];
+        continue;
+      }
+
+      hasVisibleFaces = true;
+      drawSmoothFaceBox(ctx, tf, cw, ch);
+    }
+
+    ctx.restore();
+
+    if (isTracking || hasVisibleFaces || (photoPreview && !photoPreview.classList.contains("d-none") && Object.keys(trackedFaces).length > 0)) {
+      animFrameId = requestAnimationFrame(renderHUDLoop);
+    } else {
+      animFrameId = null;
+    }
+  }
+
+  function drawSmoothFaceBox(ctx, tf, cw, ch) {
+    const x = tf.current.x;
+    const y = tf.current.y;
+    const w = tf.current.w;
+    const h = tf.current.h;
+    const color = tf.color || "#10b981";
+
+    ctx.save();
+
+    // 1. Subtle semi-transparent inner tint
+    ctx.fillStyle = color;
+    ctx.globalAlpha = Math.max(0, Math.min(1, tf.opacity * 0.05));
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 12);
+    ctx.fill();
+
+    // 2. Faint continuous boundary
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = Math.max(0, Math.min(1, tf.opacity * 0.35));
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 12);
+    ctx.stroke();
+
+    // 3. Cyber Glowing Corner Brackets
+    ctx.globalAlpha = Math.max(0, Math.min(1, tf.opacity));
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3.5;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 12;
+
+    const cornerLen = Math.max(16, Math.min(28, w * 0.22, h * 0.22));
+    const r = 8;
+
+    // Top-Left Bracket
+    ctx.beginPath();
+    ctx.moveTo(x, y + cornerLen);
+    ctx.lineTo(x, y + r);
+    ctx.arcTo(x, y, x + r, y, r);
+    ctx.lineTo(x + cornerLen, y);
+    ctx.stroke();
+
+    // Top-Right Bracket
+    ctx.beginPath();
+    ctx.moveTo(x + w - cornerLen, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.arcTo(x + w, y, x + w, y + r, r);
+    ctx.lineTo(x + w, y + cornerLen);
+    ctx.stroke();
+
+    // Bottom-Right Bracket
+    ctx.beginPath();
+    ctx.moveTo(x + w, y + h - cornerLen);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+    ctx.lineTo(x + w - cornerLen, y + h);
+    ctx.stroke();
+
+    // Bottom-Left Bracket
+    ctx.beginPath();
+    ctx.moveTo(x + cornerLen, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.arcTo(x, y + h, x, y + h - r, r);
+    ctx.lineTo(x, y + h - cornerLen);
+    ctx.stroke();
+
+    ctx.shadowBlur = 0;
+
+    // 4. Floating Header Badge Above Box
+    if (tf.tagText) {
+      ctx.font = "600 12px Inter, system-ui, -apple-system, sans-serif";
+      const textMetrics = ctx.measureText(tf.tagText);
+      const badgeH = 26;
+      const badgeW = textMetrics.width + 22;
+      const badgeX = Math.max(8, Math.min(cw - badgeW - 8, x + (w - badgeW) / 2));
+      const badgeY = Math.max(badgeH + 8, y - 8);
+
+      // Glassmorphic pill
+      ctx.fillStyle = "rgba(15, 23, 42, 0.90)";
+      ctx.beginPath();
+      ctx.roundRect(badgeX, badgeY - badgeH, badgeW, badgeH, 6);
+      ctx.fill();
+
+      // Border matching emotion color
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.roundRect(badgeX, badgeY - badgeH, badgeW, badgeH, 6);
+      ctx.stroke();
+
+      // Label text
+      ctx.fillStyle = "#ffffff";
+      ctx.textBaseline = "middle";
+      ctx.fillText(tf.tagText, badgeX + 11, badgeY - badgeH / 2);
+    }
+
+    ctx.restore();
+  }
+
+  function drawFaceHUD(data) {
+    updateTrackingTargets(data);
+  }
+
+  function openSnapshotModal() {
+    if (!lastAnalysis) return;
+    if (webcam && webcam.stream && !videoEl.paused) {
+      try {
+        const freshSnap = webcam.captureBase64(0.85);
+        if (freshSnap) lastCapturedFrame = freshSnap;
+      } catch (e) {
+        console.warn("Could not capture fresh frame on snapshot open:", e);
+      }
+    }
+    document.getElementById("modalEmoji").innerText = lastAnalysis.emoji;
+    document.getElementById("modalFeelingTag").innerText = `${lastAnalysis.label} • ${lastAnalysis.feeling_tag}`;
+    document.getElementById("modalMetricsSummary").innerText = `Confidence: ${lastAnalysis.confidence}% | Valence: ${lastAnalysis.valence >= 0 ? "+" : ""}${lastAnalysis.valence} | Energy: ${Math.round(lastAnalysis.arousal * 100)}%`;
+    document.getElementById("moodNoteInput").value = "";
+
+    const photoCont = document.getElementById("modalPhotoContainer");
+    const photoImg = document.getElementById("modalCapturedPhoto");
+    if (photoCont && photoImg) {
+      if (lastCapturedFrame) {
+        photoImg.src = lastCapturedFrame;
+        photoCont.classList.remove("d-none");
+      } else {
+        photoCont.classList.add("d-none");
+      }
+    }
+
+    const modal = new bootstrap.Modal(document.getElementById("logMoodModal"));
+    modal.show();
+  }
+
+  async function saveMoodCheckin() {
+    const note = document.getElementById("moodNoteInput").value;
+    const saveBtn = document.getElementById("confirmSaveMoodBtn");
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
+
+    try {
+      const res = await fetch("/mood/api/log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mood_data: lastAnalysis,
+          image: lastCapturedFrame,
+          note: note,
+          context: "camera_tracker"
+        })
+      });
+
+      const json = await res.json();
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = '<i data-lucide="check" style="width: 16px;"></i> Save Check-In';
+
+      if (res.ok && json.success) {
+        bootstrap.Modal.getInstance(document.getElementById("logMoodModal")).hide();
+        prependMoodTableRow(json.log);
+        if (typeof showToast === "function") {
+          showToast(json.message, "success");
+        } else {
+          alert(json.message);
+        }
+      } else {
+        alert(json.error || "Failed to log mood.");
+      }
+    } catch (err) {
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = '<i data-lucide="check" style="width: 16px;"></i> Save Check-In';
+      alert("Error saving mood log: " + err.message);
+    }
+  }
+
+  function prependMoodTableRow(log) {
+    const tbody = document.getElementById("recentMoodTableBody");
+    const noRow = document.getElementById("noLogsRow");
+    if (noRow) noRow.remove();
+
+    const photoHtml = log.captured_image ? `
+      <img src="${log.captured_image}" class="rounded-2 border cursor-pointer mood-photo-thumb shadow-sm" style="width: 48px; height: 36px; object-fit: cover; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1.0)'" onclick="showImageModal('${log.captured_image}', '${log.feeling_tag || log.dominant_mood}', '${log.time_formatted || 'Just now'}')" alt="Camera snapshot" title="Click to view full captured camera snapshot">
+    ` : `
+      <div class="rounded-2 bg-light border d-inline-flex align-items-center justify-content-center text-muted" style="width: 48px; height: 36px; font-size: 1rem;">
+        ${log.emoji || '😊'}
+      </div>
+    `;
+
+    const tr = document.createElement("tr");
+    tr.className = "table-success";
+    tr.innerHTML = `
+      <td class="ps-4 text-muted small">${log.time_formatted || "Just now"}</td>
+      <td>${photoHtml}</td>
+      <td>
+        <span class="d-inline-flex align-items-center gap-2 fw-semibold">
+          <span>${log.emoji}</span>
+          <span>${log.feeling_tag || log.dominant_mood}</span>
+        </span>
+      </td>
+      <td><span class="badge bg-light text-dark border">${log.confidence}%</span></td>
+      <td>
+        <span class="font-monospace small ${log.valence > 0 ? 'text-success' : log.valence < 0 ? 'text-danger' : 'text-muted'}">
+          ${(log.valence >= 0 ? "+" : "") + Number(log.valence).toFixed(2)}
+        </span>
+      </td>
+      <td><span class="font-monospace small">${Number(log.arousal).toFixed(2)}</span></td>
+      <td><span class="badge bg-secondary-subtle text-secondary">${log.context}</span></td>
+      <td class="text-muted small">${log.note || '—'}</td>
+    `;
+    tbody.prepend(tr);
+    setTimeout(() => { tr.classList.remove("table-success"); }, 2000);
+  }
+
+  function showImageModal(imgSrc, title, timeStr) {
+    if (!imgSrc) return;
+    const modalEl = document.getElementById("viewPhotoModal");
+    if (!modalEl) return;
+    document.getElementById("fullSizeCapturedPhoto").src = imgSrc;
+    document.getElementById("viewPhotoModalTitle").innerHTML = `<i data-lucide="image" style="width: 16px;"></i> ${title || "Captured Face Snapshot"}`;
+    document.getElementById("viewPhotoModalSub").innerText = timeStr ? `Captured on ${timeStr}` : "Live camera snapshot";
+    if (window.lucide) lucide.createIcons();
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+  }
+</script>
+{% endblock %}

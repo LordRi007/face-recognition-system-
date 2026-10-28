@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+
+{% block title %}User Management{% endblock %}
+{% block page_header %}User Directory & Access Control{% endblock %}
+
+{% block content %}
+<div class="card card-custom mb-4">
+  <div class="card-body-custom">
+    <!-- Filters & Search Form -->
+    <form method="GET" action="{{ url_for('users.list_users') }}" class="row g-2 align-items-center">
+      <div class="col-md-3">
+        <div class="input-group">
+          <span class="input-group-text bg-transparent border-end-0"><i data-lucide="search" style="width: 16px;"></i></span>
+          <input type="text" name="q" class="form-control border-start-0" placeholder="Search name or email..." value="{{ current_filters.q or '' }}">
+        </div>
+      </div>
+
+      <div class="col-md-2">
+        <select name="dept" class="form-select">
+          <option value="">All Departments</option>
+          {% for dept in departments %}
+          <option value="{{ dept.id }}" {% if current_filters.dept == dept.id|string %}selected{% endif %}>{{ dept.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-md-2">
+        <select name="role" class="form-select">
+          <option value="">All Roles</option>
+          <option value="admin" {% if current_filters.role == 'admin' %}selected{% endif %}>Admin</option>
+          <option value="staff" {% if current_filters.role == 'staff' %}selected{% endif %}>Staff</option>
+          <option value="user" {% if current_filters.role == 'user' %}selected{% endif %}>User</option>
+        </select>
+      </div>
+
+      <div class="col-md-2">
+        <select name="enrolled" class="form-select">
+          <option value="">All Face Status</option>
+          <option value="yes" {% if current_filters.enrolled == 'yes' %}selected{% endif %}>Face Enrolled</option>
+          <option value="no" {% if current_filters.enrolled == 'no' %}selected{% endif %}>Not Enrolled</option>
+        </select>
+      </div>
+
+      <div class="col-md-1">
+        <button type="submit" class="btn btn-outline-secondary w-100">Filter</button>
+      </div>
+
+      {% if current_user.is_admin %}
+      <div class="col-md-2 text-md-end ms-auto">
+        <a href="{{ url_for('users.add_user') }}" class="btn btn-primary-custom d-inline-flex align-items-center gap-1 w-100 justify-content-center">
+          <i data-lucide="user-plus" style="width: 16px;"></i>
+          <span>Add User</span>
+        </a>
+      </div>
+      {% endif %}
+    </form>
+  </div>
+</div>
+
+<!-- Users Table -->
+<div class="card card-custom">
+  <div class="card-header-custom">
+    <div class="d-flex align-items-center gap-2">
+      <i data-lucide="users" class="text-primary"></i>
+      <h6 class="mb-0 fw-bold">Registered Users ({{ users|length }})</h6>
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-custom">
+      <thead>
+        <tr>
+          <th>User</th>
+          <th>Department</th>
+          <th>Role</th>
+          <th>Biometric Status</th>
+          <th>Account Status</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td>
+            <div class="d-flex align-items-center gap-2">
+              <div class="rounded-circle bg-secondary-subtle text-secondary d-flex align-items-center justify-content-center fw-bold" style="width: 36px; height: 36px;">
+                {{ u.name[:2].upper() }}
+              </div>
+              <div>
+                <a href="{{ url_for('users.view_user', user_id=u.id) }}" class="fw-bold text-decoration-none text-dark">{{ u.name }}</a>
+                <div class="text-muted small">{{ u.email }}</div>
+              </div>
+            </div>
+          </td>
+          <td>{{ u.department.name if u.department else '<span class="text-muted">None</span>'|safe }}</td>
+          <td>
+            {% if u.role == 'admin' %}
+              <span class="badge-status badge-admin">Admin</span>
+            {% elif u.role == 'staff' %}
+              <span class="badge-status badge-staff">Staff</span>
+            {% else %}
+              <span class="badge-status badge-inactive">User</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if u.has_face_enrolled %}
+              <span class="badge-status badge-enrolled" title="Enrolled: {{ u.face_enrollment.created_at.strftime('%Y-%m-%d') }}">
+                <i data-lucide="scan-face" style="width: 14px;"></i> Enrolled
+              </span>
+            {% else %}
+              <span class="badge-status badge-inactive">
+                <i data-lucide="camera-off" style="width: 14px;"></i> Not Enrolled
+              </span>
+            {% endif %}
+          </td>
+          <td>
+            {% if u.status == 'active' %}
+              <span class="badge-status badge-active"><i data-lucide="check" style="width: 12px;"></i> Active</span>
+            {% elif u.status == 'suspended' %}
+              <span class="badge-status badge-absent"><i data-lucide="ban" style="width: 12px;"></i> Suspended</span>
+            {% else %}
+              <span class="badge-status badge-inactive">Inactive</span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            <div class="btn-group btn-group-sm">
+              <a href="{{ url_for('users.view_user', user_id=u.id) }}" class="btn btn-outline-secondary" title="View Profile">
+                <i data-lucide="eye" style="width: 14px;"></i>
+              </a>
+              {% if current_user.is_admin %}
+              <a href="{{ url_for('users.edit_user', user_id=u.id) }}" class="btn btn-outline-secondary" title="Edit Profile">
+                <i data-lucide="edit-3" style="width: 14px;"></i>
+              </a>
+              <a href="{{ url_for('recognition.enroll', user_id=u.id) }}" class="btn btn-outline-primary" title="Enroll Face">
+                <i data-lucide="scan-face" style="width: 14px;"></i>
+              </a>
+              <button type="button" class="btn btn-outline-danger" title="Delete User" data-bs-toggle="modal" data-bs-target="#deleteModal{{ u.id }}">
+                <i data-lucide="trash-2" style="width: 14px;"></i>
+              </button>
+              {% endif %}
+            </div>
+
+            {% if current_user.is_admin %}
+            <!-- Delete Confirmation Modal -->
+            <div class="modal fade text-start" id="deleteModal{{ u.id }}" tabindex="-1" aria-hidden="true">
+              <div class="modal-dialog">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title text-danger"><i data-lucide="alert-triangle"></i> Confirm Permanent Deletion</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                  </div>
+                  <div class="modal-body">
+                    <p>Are you sure you want to delete user <strong>{{ u.name }}</strong> ({{ u.email }})?</p>
+                    <div class="alert alert-warning small">
+                      <strong>Warning:</strong> This action will permanently wipe their account, all attendance logs, and irreversibly delete all encrypted biometric facial vectors.
+                    </div>
+                  </div>
+                  <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <form method="POST" action="{{ url_for('users.delete_user', user_id=u.id) }}">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <button type="submit" class="btn btn-danger">Confirm Delete</button>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6" class="text-center py-4 text-muted">
+            <i data-lucide="user-x" class="d-block mx-auto mb-2" style="width: 28px;"></i>
+            No users found matching current filters.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

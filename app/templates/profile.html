@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}My Profile{% endblock %}
+{% block page_header %}Personal Profile & Preferences{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <!-- Contact Info Card -->
+    <div class="card card-custom mb-4">
+      <div class="card-header-custom">
+        <div class="d-flex align-items-center gap-2">
+          <i data-lucide="user" class="text-primary"></i>
+          <h6 class="mb-0 fw-bold">Personal Information</h6>
+        </div>
+      </div>
+      <div class="card-body-custom">
+        <form method="POST" action="{{ url_for('auth.profile') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="action" value="update_info">
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Full Name</label>
+              <input type="text" name="name" class="form-control" value="{{ user.name }}" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Email Address (Immutable)</label>
+              <input type="email" class="form-control" value="{{ user.email }}" disabled>
+            </div>
+          </div>
+
+          <div class="row g-3 mb-4">
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Phone Number</label>
+              <input type="tel" name="phone" class="form-control" value="{{ user.phone or '' }}" placeholder="+1 555-0100">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Department</label>
+              <input type="text" class="form-control" value="{{ user.department.name if user.department else 'None' }}" disabled>
+            </div>
+          </div>
+
+          <div class="text-end">
+            <button type="submit" class="btn btn-primary-custom btn-sm">Save Information</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Alternative PIN Card -->
+    <div class="card card-custom mb-4">
+      <div class="card-header-custom">
+        <div class="d-flex align-items-center gap-2">
+          <i data-lucide="key" class="text-primary"></i>
+          <h6 class="mb-0 fw-bold">Alternative Non-Biometric PIN</h6>
+        </div>
+        {% if user.pin_hash %}
+          <span class="badge bg-success-subtle text-success">PIN Active</span>
+        {% else %}
+          <span class="badge bg-secondary-subtle text-secondary">Not Configured</span>
+        {% endif %}
+      </div>
+      <div class="card-body-custom">
+        <p class="text-muted small mb-3">
+          Configure a 4 to 6 digit numerical PIN to verify your identity and mark attendance whenever the camera is unavailable or if you choose not to use facial recognition.
+        </p>
+        <form method="POST" action="{{ url_for('auth.profile') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="action" value="update_pin">
+
+          <div class="row g-3 align-items-center mb-3">
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">4-6 Digit Numerical PIN</label>
+              <input type="password" maxlength="6" name="pin" class="form-control font-monospace" placeholder="Enter new PIN or leave empty to clear">
+            </div>
+            <div class="col-md-6 d-flex align-items-end">
+              <button type="submit" class="btn btn-outline-primary btn-sm">Update PIN</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Change Password Card -->
+    <div class="card card-custom">
+      <div class="card-header-custom">
+        <div class="d-flex align-items-center gap-2">
+          <i data-lucide="lock" class="text-primary"></i>
+          <h6 class="mb-0 fw-bold">Update Password</h6>
+        </div>
+      </div>
+      <div class="card-body-custom">
+        <form method="POST" action="{{ url_for('auth.profile') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="action" value="change_password">
+
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Current Password</label>
+            <input type="password" name="current_password" class="form-control" required>
+          </div>
+
+          <div class="row g-3 mb-4">
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">New Password (min 8 chars)</label>
+              <input type="password" name="new_password" class="form-control" minlength="8" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Confirm New Password</label>
+              <input type="password" name="confirm_password" class="form-control" minlength="8" required>
+            </div>
+          </div>
+
+          <div class="text-end">
+            <button type="submit" class="btn btn-outline-danger btn-sm">Change Password</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

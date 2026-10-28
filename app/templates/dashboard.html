@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+
+{% block title %}Executive Dashboard{% endblock %}
+{% block page_header %}System Overview & Biometrics{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-4">
+  <!-- Total Users -->
+  <div class="col-sm-6 col-xl-3">
+    <div class="stat-card">
+      <div>
+        <div class="text-muted small fw-semibold text-uppercase">Total Users</div>
+        <div class="fs-2 fw-bold mt-1">{{ metrics.total_users }}</div>
+        <div class="small text-muted mt-1"><i data-lucide="users" style="width: 14px;"></i> Active Directory</div>
+      </div>
+      <div class="stat-icon stat-icon-blue">
+        <i data-lucide="users"></i>
+      </div>
+    </div>
+  </div>
+
+  <!-- Enrolled Faces -->
+  <div class="col-sm-6 col-xl-3">
+    <div class="stat-card">
+      <div>
+        <div class="text-muted small fw-semibold text-uppercase">Enrolled Faces</div>
+        <div class="fs-2 fw-bold mt-1 text-primary">{{ metrics.enrolled_faces }}</div>
+        <div class="small text-success mt-1">
+          <i data-lucide="shield-check" style="width: 14px;"></i> {{ ((metrics.enrolled_faces / metrics.total_users * 100) if metrics.total_users > 0 else 0)|round(1) }}% Consented
+        </div>
+      </div>
+      <div class="stat-icon stat-icon-purple">
+        <i data-lucide="scan-face"></i>
+      </div>
+    </div>
+  </div>
+
+  <!-- Today's Attendance -->
+  <div class="col-sm-6 col-xl-3">
+    <div class="stat-card">
+      <div>
+        <div class="text-muted small fw-semibold text-uppercase">Today's Present</div>
+        <div class="fs-2 fw-bold mt-1 text-success">{{ metrics.today_present }}</div>
+        <div class="small text-warning mt-1">
+          <i data-lucide="clock" style="width: 14px;"></i> {{ metrics.today_late }} Late arrivals
+        </div>
+      </div>
+      <div class="stat-icon stat-icon-green">
+        <i data-lucide="check-circle-2"></i>
+      </div>
+    </div>
+  </div>
+
+  <!-- Verification Success Rate -->
+  <div class="col-sm-6 col-xl-3">
+    <div class="stat-card">
+      <div>
+        <div class="text-muted small fw-semibold text-uppercase">Verify Accuracy</div>
+        <div class="fs-2 fw-bold mt-1">{{ metrics.verification_success_rate }}%</div>
+        <div class="small text-muted mt-1">
+          {{ metrics.successful_verifications }} Pass / {{ metrics.failed_verifications }} Fail
+        </div>
+      </div>
+      <div class="stat-icon stat-icon-amber">
+        <i data-lucide="target"></i>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Quick Action Shortcuts -->
+<div class="row g-3 mb-4">
+  <div class="col-12">
+    <div class="card card-custom p-3 bg-surface">
+      <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge bg-primary-subtle text-primary p-2 rounded-circle">
+            <i data-lucide="zap" style="width: 18px; height: 18px;"></i>
+          </span>
+          <div>
+            <h6 class="mb-0 fw-bold">Quick Operations</h6>
+            <span class="text-muted small">Execute live identity verification or enrollment</span>
+          </div>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+          <a href="{{ url_for('recognition.verify') }}" class="btn btn-primary-custom d-inline-flex align-items-center gap-2">
+            <i data-lucide="camera" style="width: 18px;"></i>
+            <span>Verify Face</span>
+          </a>
+          <a href="{{ url_for('recognition.enroll') }}" class="btn btn-outline-primary d-inline-flex align-items-center gap-2">
+            <i data-lucide="user-check" style="width: 18px;"></i>
+            <span>Enroll New Face</span>
+          </a>
+          <a href="{{ url_for('attendance.index') }}" class="btn btn-outline-secondary d-inline-flex align-items-center gap-2">
+            <i data-lucide="calendar" style="width: 18px;"></i>
+            <span>Attendance Sheet</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Analytics Charts Row -->
+<div class="row g-3 mb-4">
+  <div class="col-lg-8">
+    <div class="card card-custom h-100">
+      <div class="card-header-custom">
+        <div class="d-flex align-items-center gap-2">
+          <i data-lucide="bar-chart-2" class="text-primary"></i>
+          <h6 class="mb-0 fw-bold">Attendance Trends (Last 7 Days)</h6>
+        </div>
+        <span class="badge bg-secondary-subtle text-secondary small">Daily Inflow</span>
+      </div>
+      <div class="card-body-custom" style="position: relative; height: 300px;">
+        <canvas id="attendanceTrendChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card card-custom h-100">
+      <div class="card-header-custom">
+        <div class="d-flex align-items-center gap-2">
+          <i data-lucide="pie-chart" class="text-primary"></i>
+          <h6 class="mb-0 fw-bold">Verification Breakdown</h6>
+        </div>
+      </div>
+      <div class="card-body-custom d-flex flex-column align-items-center justify-content-center" style="position: relative; height: 300px;">
+        <canvas id="verificationBreakdownChart"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Recent Verifications & System Health -->
+<div class="row g-3">
+  <!-- Recent Verifications -->
+  <div class="col-lg-8">
+    <div class="card card-custom">
+      <div class="card-header-custom">
+        <div class="d-flex align-items-center gap-2">
+          <i data-lucide="activity" class="text-primary"></i>
+          <h6 class="mb-0 fw-bold">Recent Verification Activity</h6>
+        </div>
+        {% if current_user.is_staff %}
+        <a href="{{ url_for('logs.verification_logs') }}" class="small text-decoration-none">View All Logs &rarr;</a>
+        {% endif %}
+      </div>
+      <div class="table-responsive">
+        <table class="table table-custom">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>User</th>
+              <th>Method</th>
+              <th>Distance / Score</th>
+              <th>Outcome</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for log in recent_verifications %}
+            <tr>
+              <td class="text-muted small">{{ log.timestamp.strftime('%H:%M:%S') }}</td>
+              <td class="fw-semibold">
+                {{ log.user.name if log.user else 'Anonymous' }}
+              </td>
+              <td>
+                <span class="badge bg-light text-dark border">
+                  {{ log.verification_method }}
+                </span>
+              </td>
+              <td>
+                {% if log.distance_score is not none %}
+                  <span class="font-monospace small">{{ log.distance_score|round(4) }}</span>
+                  <span class="text-muted" style="font-size: 0.75rem;">(cut: {{ log.threshold_used }})</span>
+                {% else %}
+                  <span class="text-muted">&mdash;</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if log.result == 'success' %}
+                  <span class="badge-status badge-present"><i data-lucide="check" style="width: 12px;"></i> Match</span>
+                {% elif log.result == 'failure' %}
+                  <span class="badge-status badge-absent"><i data-lucide="x" style="width: 12px;"></i> Mismatch</span>
+                {% elif log.result == 'spoof_detected' %}
+                  <span class="badge-status badge-absent"><i data-lucide="alert-triangle" style="width: 12px;"></i> Spoof</span>
+                {% else %}
+                  <span class="badge-status badge-late">{{ log.result|replace('_', ' ')|capitalize }}</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="5" class="text-center py-4 text-muted">
+                <i data-lucide="inbox" class="d-block mx-auto mb-2" style="width: 24px;"></i>
+                No verification attempts logged yet today.
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- System Health & Security Metrics -->
+  <div class="col-lg-4">
+    <div class="card card-custom h-100">
+      <div class="card-header-custom">
+        <div class="d-flex align-items-center gap-2">
+          <i data-lucide="shield" class="text-success"></i>
+          <h6 class="mb-0 fw-bold">System Health & Security</h6>
+        </div>
+      </div>
+      <div class="card-body-custom">
+        <div class="mb-3 d-flex justify-content-between align-items-center">
+          <span class="small text-muted">SQL Database Engine</span>
+          <span class="badge bg-success-subtle text-success"><i data-lucide="check" style="width: 12px;"></i> Online (Active)</span>
+        </div>
+        <div class="mb-3 d-flex justify-content-between align-items-center">
+          <span class="small text-muted">FaceNet512 Biometrics</span>
+          <span class="badge bg-success-subtle text-success"><i data-lucide="check" style="width: 12px;"></i> Operational</span>
+        </div>
+        <div class="mb-3 d-flex justify-content-between align-items-center">
+          <span class="small text-muted">Biometric Encryption</span>
+          <span class="badge bg-primary-subtle text-primary"><i data-lucide="lock" style="width: 12px;"></i> AES-256 Fernet</span>
+        </div>
+        <div class="mb-3 d-flex justify-content-between align-items-center">
+          <span class="small text-muted">Matching Threshold</span>
+          <span class="badge bg-light text-dark border">Cosine &le; 0.30</span>
+        </div>
+        <div class="mb-4 d-flex justify-content-between align-items-center">
+          <span class="small text-muted">Late Arrival Cutoff</span>
+          <span class="badge bg-light text-dark border">09:15:00 UTC</span>
+        </div>
+
+        <div class="p-3 bg-light rounded small">
+          <div class="fw-semibold text-dark mb-1"><i data-lucide="info" style="width: 14px;"></i> Privacy Notice</div>
+          <p class="text-muted mb-0" style="font-size: 0.8rem;">
+            Biometric facial templates are encrypted at rest. Raw camera captures are never saved in logs.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/chart.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const trendData = {{ trends|tojson }};
+    const breakdownData = {{ breakdown|tojson }};
+
+    if (window.renderAttendanceTrendChart) {
+      renderAttendanceTrendChart("attendanceTrendChart", trendData);
+    }
+    if (window.renderVerificationBreakdownChart) {
+      renderVerificationBreakdownChart("verificationBreakdownChart", breakdownData);
+    }
+  });
+</script>
+{% endblock %}

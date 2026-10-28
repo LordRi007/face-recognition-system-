@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+
+{% block title %}Daily Attendance - {{ app_title }}{% endblock %}
+{% block page_header %}Attendance Roster & Tracking{% endblock %}
+
+{% block content %}
+<!-- Metric Summary Cards -->
+<div class="row g-3 mb-4">
+  <div class="col-sm-4">
+    <div class="stat-card">
+      <div>
+        <div class="text-muted small fw-semibold text-uppercase">Present Today</div>
+        <div class="fs-2 fw-bold mt-1 text-success">{{ present_count }}</div>
+        <div class="small text-muted mt-1"><i data-lucide="check" style="width: 14px;"></i> Total checked in</div>
+      </div>
+      <div class="stat-icon stat-icon-green"><i data-lucide="user-check"></i></div>
+    </div>
+  </div>
+
+  <div class="col-sm-4">
+    <div class="stat-card">
+      <div>
+        <div class="text-muted small fw-semibold text-uppercase">Late Arrivals</div>
+        <div class="fs-2 fw-bold mt-1 text-warning">{{ late_count }}</div>
+        <div class="small text-muted mt-1">Past 09:15 threshold</div>
+      </div>
+      <div class="stat-icon stat-icon-amber"><i data-lucide="clock"></i></div>
+    </div>
+  </div>
+
+  <div class="col-sm-4">
+    <div class="stat-card">
+      <div>
+        <div class="text-muted small fw-semibold text-uppercase">Absent / Unrecorded</div>
+        <div class="fs-2 fw-bold mt-1 text-danger">{{ absent_count }}</div>
+        <div class="small text-muted mt-1">No attendance logged</div>
+      </div>
+      <div class="stat-icon stat-icon-red"><i data-lucide="user-x"></i></div>
+    </div>
+  </div>
+</div>
+
+<!-- Filters & Actions Header -->
+<div class="card card-custom mb-4">
+  <div class="card-body-custom">
+    <form method="GET" action="{{ url_for('attendance.index') }}" class="row g-2 align-items-center">
+      <div class="col-md-3">
+        <label for="dateInput" class="form-label small fw-semibold">Target Date</label>
+        <input type="date" id="dateInput" name="date" class="form-control" value="{{ target_date.isoformat() }}">
+      </div>
+      <div class="col-md-3">
+        <label for="deptSelect" class="form-label small fw-semibold">Department</label>
+        <select id="deptSelect" name="dept" class="form-select">
+          <option value="">All Departments</option>
+          {% for dept in departments %}
+          <option value="{{ dept.id }}" {% if selected_dept == dept.id %}selected{% endif %}>{{ dept.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2 d-flex align-items-end">
+        <button type="submit" class="btn btn-outline-secondary w-100">
+          <i data-lucide="filter" style="width: 14px;"></i> Filter
+        </button>
+      </div>
+      <div class="col-md-4 text-md-end d-flex align-items-end justify-content-md-end gap-2 ms-auto">
+        <a href="{{ url_for('attendance.export_csv', date=target_date.isoformat(), dept=selected_dept) }}" class="btn btn-outline-primary d-inline-flex align-items-center gap-1">
+          <i data-lucide="download" style="width: 14px;"></i>
+          <span>Export CSV</span>
+        </a>
+        <a href="{{ url_for('recognition.verify') }}" class="btn btn-primary-custom d-inline-flex align-items-center gap-1">
+          <i data-lucide="camera" style="width: 14px;"></i>
+          <span>Check-In Kiosk</span>
+        </a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Attended Users Roster -->
+<div class="card card-custom mb-4">
+  <div class="card-header-custom">
+    <div class="d-flex align-items-center gap-2">
+      <i data-lucide="calendar-check" class="text-primary"></i>
+      <h6 class="mb-0 fw-bold">Attendance Records: {{ target_date.strftime('%B %d, %Y') }}</h6>
+    </div>
+    <span class="badge bg-secondary-subtle text-secondary">{{ attendances|length }} Logged</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-custom">
+      <thead>
+        <tr>
+          <th>User</th>
+          <th>Department</th>
+          <th>Check-In (UTC)</th>
+          <th>Check-Out (UTC)</th>
+          <th>Method</th>
+          <th>Status</th>
+          <th>Notes</th>
+          {% if current_user.is_admin %}
+          <th class="text-end">Correction</th>
+          {% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in attendances %}
+        <tr>
+          <td>
+            <a href="{{ url_for('users.view_user', user_id=a.user.id) }}" class="fw-bold text-decoration-none text-dark">
+              {{ a.user.name }}
+            </a>
+            <div class="text-muted small">{{ a.user.email }}</div>
+          </td>
+          <td>{{ a.user.department.name if a.user and a.user.department else 'None' }}</td>
+          <td class="font-monospace">{{ a.check_in.strftime('%H:%M:%S') if a.check_in else '<span class="text-muted">&mdash;</span>'|safe }}</td>
+          <td class="font-monospace">{{ a.check_out.strftime('%H:%M:%S') if a.check_out else '<span class="text-muted">&mdash;</span>'|safe }}</td>
+          <td>
+            {% if a.verification_method == 'facial' %}
+              <span class="badge bg-primary-subtle text-primary border"><i data-lucide="scan-face" style="width: 12px;"></i> Facial</span>
+            {% elif a.verification_method == 'manual_pin' %}
+              <span class="badge bg-warning-subtle text-warning border"><i data-lucide="key" style="width: 12px;"></i> PIN</span>
+            {% else %}
+              <span class="badge bg-secondary-subtle text-secondary border">Admin</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if a.status == 'present' %}
+              <span class="badge-status badge-present">Present</span>
+            {% elif a.status == 'late' %}
+              <span class="badge-status badge-late">Late</span>
+            {% else %}
+              <span class="badge-status badge-absent">{{ a.status|capitalize }}</span>
+            {% endif %}
+          </td>
+          <td class="small text-muted">{{ a.notes or '&mdash;'|safe }}</td>
+          {% if current_user.is_admin %}
+          <td class="text-end">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#correctModal{{ a.id }}" title="Correct Attendance">
+              <i data-lucide="edit-2" style="width: 14px;"></i>
+            </button>
+
+            <!-- Admin Attendance Correction Modal -->
+            <div class="modal fade text-start" id="correctModal{{ a.id }}" tabindex="-1" aria-hidden="true">
+              <div class="modal-dialog">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title"><i data-lucide="edit"></i> Correct Attendance Record</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                  </div>
+                  <form method="POST" action="{{ url_for('attendance.correct', attendance_id=a.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="modal-body">
+                      <p class="small text-muted">Adjusting attendance for <strong>{{ a.user.name }}</strong> on {{ a.date }}.</p>
+                      
+                      <div class="mb-3">
+                        <label class="form-label small fw-semibold">Status</label>
+                        <select name="status" class="form-select">
+                          <option value="present" {% if a.status == 'present' %}selected{% endif %}>Present</option>
+                          <option value="late" {% if a.status == 'late' %}selected{% endif %}>Late</option>
+                          <option value="half_day" {% if a.status == 'half_day' %}selected{% endif %}>Half Day</option>
+                          <option value="absent" {% if a.status == 'absent' %}selected{% endif %}>Absent</option>
+                        </select>
+                      </div>
+
+                      <div class="row g-2 mb-3">
+                        <div class="col-6">
+                          <label class="form-label small fw-semibold">Check-In Time (HH:MM)</label>
+                          <input type="time" name="check_in_time" class="form-control" value="{{ a.check_in.strftime('%H:%M') if a.check_in else '' }}">
+                        </div>
+                        <div class="col-6">
+                          <label class="form-label small fw-semibold">Check-Out Time (HH:MM)</label>
+                          <input type="time" name="check_out_time" class="form-control" value="{{ a.check_out.strftime('%H:%M') if a.check_out else '' }}">
+                        </div>
+                      </div>
+
+                      <div class="mb-3">
+                        <label class="form-label small fw-semibold">Audit Correction Reason *</label>
+                        <input type="text" name="reason" class="form-control" placeholder="e.g. Employee badge malfunction / approved late slip" required>
+                        <div class="form-text small">Reason is recorded in the permanent audit trail.</div>
+                      </div>
+                    </div>
+                    <div class="modal-footer">
+                      <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                      <button type="submit" class="btn btn-primary">Save Adjustment</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </td>
+          {% endif %}
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="8" class="text-center py-4 text-muted">
+            <i data-lucide="calendar-x" class="d-block mx-auto mb-2" style="width: 24px;"></i>
+            No attendance entries logged for this date.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Absent Users Table -->
+{% if absent_users %}
+<div class="card card-custom">
+  <div class="card-header-custom">
+    <div class="d-flex align-items-center gap-2">
+      <i data-lucide="user-x" class="text-danger"></i>
+      <h6 class="mb-0 fw-bold">Absent / Unrecorded Users ({{ absent_users|length }})</h6>
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-custom">
+      <thead>
+        <tr>
+          <th>User</th>
+          <th>Department</th>
+          <th>Role</th>
+          <th>Biometric Status</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in absent_users %}
+        <tr>
+          <td class="fw-semibold">{{ u.name }} <span class="text-muted small">({{ u.email }})</span></td>
+          <td>{{ u.department.name if u.department else 'None' }}</td>
+          <td><span class="badge bg-light text-dark border">{{ u.role|capitalize }}</span></td>
+          <td>
+            {% if u.has_face_enrolled %}
+              <span class="badge bg-success-subtle text-success">Enrolled</span>
+            {% else %}
+              <span class="badge bg-secondary-subtle text-secondary">Not Enrolled</span>
+            {% endif %}
+          </td>
+          <td><span class="badge-status badge-absent">Unrecorded / Absent</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

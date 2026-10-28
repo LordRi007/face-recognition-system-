@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}Reports & Analytics - {{ app_title }}{% endblock %}
+{% block page_header %}Biometric Analytics & Attendance Reporting{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-4">
+  <div class="col-12 d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div>
+      <h5 class="fw-bold mb-0">System Analytics & Compliance Overview</h5>
+      <span class="text-muted small">Real-time attendance rates, biometric adoption, and model reliability</span>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('attendance.export_csv') }}" class="btn btn-outline-primary d-inline-flex align-items-center gap-1">
+        <i data-lucide="download" style="width: 14px;"></i> Export Full CSV
+      </a>
+      <button class="btn btn-outline-secondary d-inline-flex align-items-center gap-1" onclick="window.print()">
+        <i data-lucide="printer" style="width: 14px;"></i> Print Report
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Charts Row -->
+<div class="row g-3 mb-4">
+  <div class="col-lg-8">
+    <div class="card card-custom h-100">
+      <div class="card-header-custom">
+        <div class="d-flex align-items-center gap-2">
+          <i data-lucide="trending-up" class="text-primary"></i>
+          <h6 class="mb-0 fw-bold">14-Day Attendance Dynamics</h6>
+        </div>
+        <span class="badge bg-light text-dark border">On-Time vs Late</span>
+      </div>
+      <div class="card-body-custom" style="position: relative; height: 320px;">
+        <canvas id="reportTrendChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card card-custom h-100">
+      <div class="card-header-custom">
+        <div class="d-flex align-items-center gap-2">
+          <i data-lucide="pie-chart" class="text-primary"></i>
+          <h6 class="mb-0 fw-bold">Verification Outcomes</h6>
+        </div>
+      </div>
+      <div class="card-body-custom d-flex flex-column align-items-center justify-content-center" style="position: relative; height: 320px;">
+        <canvas id="reportBreakdownChart"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Department Breakdown Table -->
+<div class="card card-custom">
+  <div class="card-header-custom">
+    <div class="d-flex align-items-center gap-2">
+      <i data-lucide="building" class="text-primary"></i>
+      <h6 class="mb-0 fw-bold">Departmental Breakdown & Biometric Adoption</h6>
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-custom">
+      <thead>
+        <tr>
+          <th>Department</th>
+          <th>Total Members</th>
+          <th>Biometric Enrollment</th>
+          <th>Present Today</th>
+          <th>Attendance Rate</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in dept_stats %}
+        <tr>
+          <td class="fw-bold">{{ d.name }}</td>
+          <td>{{ d.user_count }} users</td>
+          <td>
+            <div class="d-flex align-items-center gap-2">
+              <span class="fw-semibold">{{ d.enrolled_count }} / {{ d.user_count }}</span>
+              <span class="badge bg-primary-subtle text-primary">
+                {{ ((d.enrolled_count / d.user_count * 100) if d.user_count > 0 else 0)|round(1) }}%
+              </span>
+            </div>
+          </td>
+          <td><span class="badge-status badge-present">{{ d.present_today }} checked in</span></td>
+          <td>
+            <div class="d-flex align-items-center gap-2">
+              <div class="progress flex-grow-1" style="height: 6px; min-width: 80px;">
+                <div class="progress-bar bg-success" style="width: {{ d.attendance_rate }}%"></div>
+              </div>
+              <span class="fw-bold small">{{ d.attendance_rate }}%</span>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="5" class="text-center py-4 text-muted">No departmental statistics available.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/chart.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const trendData = {{ trends|tojson }};
+    const breakdownData = {{ breakdown|tojson }};
+
+    if (window.renderAttendanceTrendChart) {
+      renderAttendanceTrendChart("reportTrendChart", trendData);
+    }
+    if (window.renderVerificationBreakdownChart) {
+      renderVerificationBreakdownChart("reportBreakdownChart", breakdownData);
+    }
+  });
+</script>
+{% endblock %}
