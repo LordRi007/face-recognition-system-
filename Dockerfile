@@ -10,16 +10,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Create user with UID 1000 for Hugging Face Spaces compatibility
+RUN useradd -m -u 1000 frms
+
 # Set environment flags
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     FLASK_ENV=production \
-    PORT=5000
+    PORT=7860 \
+    HOME=/home/frms
 
 WORKDIR /app
-
-# Create unprivileged user for container security
-RUN groupadd -r frms && useradd -r -g frms -d /app -s /sbin/nologin frms
 
 # Install Python dependencies
 COPY requirements.txt .
@@ -31,15 +32,15 @@ COPY . .
 
 # Ensure storage directories exist with correct permissions
 RUN mkdir -p /app/uploads /app/temp_uploads /app/instance && \
-    chown -R frms:frms /app
+    chown -R frms:frms /app /home/frms
 
 USER frms
 
-EXPOSE 5000
 EXPOSE 7860
+EXPOSE 5000
 
 # Health check (dynamic port)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:${PORT:-5000}/ || exit 1
+    CMD curl -f http://localhost:${PORT:-7860}/login || exit 1
 
 CMD ["gunicorn", "-c", "gunicorn.conf.py", "run:app"]

@@ -1,3 +1,13 @@
+---
+title: Face Recognition Management System
+emoji: 👤
+colorFrom: indigo
+colorTo: blue
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # Face Recognition Management System (FRMS)
 
 A modern, secure, responsive, and production-ready **Web-Based Face Recognition and Identity Management System** built with Python, Flask, DeepFace (FaceNet512), OpenCV, and Bootstrap 5.
